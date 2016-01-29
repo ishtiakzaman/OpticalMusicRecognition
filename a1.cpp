@@ -191,8 +191,9 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-	
-	print_image_value(input_image);
+
+	// To print the values of an image use the following call	
+	//print_image_value(input_image);
 
 	// test step 2 by applying mean filters to the input image
 	SDoublePlane mean_filter(3,3);
