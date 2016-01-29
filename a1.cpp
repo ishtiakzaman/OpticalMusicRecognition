@@ -112,6 +112,22 @@ void  write_detection_image(const string &filename, const vector<DetectedSymbol>
 // The rest of these functions are incomplete. These are just suggestions to 
 // get you started -- feel free to add extra functions, change function
 // parameters, etc.
+//
+//
+// Print the value of the image
+//
+void print_image_value(const SDoublePlane &input)
+{
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			cout << input[i][j] << " ";
+		}
+		cout << endl;
+	}
+
+}
 
 // Convolve an image with a separable convolution kernel
 //
@@ -175,6 +191,8 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
+	
+	print_image_value(input_image);
 
 	// test step 2 by applying mean filters to the input image
 	SDoublePlane mean_filter(3,3);
