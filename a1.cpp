@@ -303,8 +303,8 @@ SDoublePlane non_maximum_suppress(const SDoublePlane &input, int w, int h)
 	return output;
 }
 
-int get_notes_possitions(const SDoublePlane &input, SDoublePlane &plane1,
-		SDoublePlane &plane2, SDoublePlane &plane3)
+int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
+		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest)
 {
 	// non-maximum suppress size
 	int sup_w,  sup_h;
@@ -340,6 +340,10 @@ int get_notes_possitions(const SDoublePlane &input, SDoublePlane &plane1,
 	// non-maximum suppress
 	SDoublePlane sup_eighthrest = non_maximum_suppress(hammdis_eighthrest, template_eighthrest.cols(), template_eighthrest.rows());
 	write_image("sup_hamming_dist_eighthrest.png", sup_eighthrest);
+
+	pl_note = sup_note;
+	pl_quarterrest = sup_quarterrest;
+	pl_eighthrest = sup_eighthrest;
 	
 	return 0;
 }
