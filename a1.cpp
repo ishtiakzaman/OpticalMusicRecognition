@@ -176,6 +176,12 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 	return output;
 }
 
+// Get Hamming distance map
+SDoublePlane get_Hamming_distance(const SDoublePlane &input, const SDoublePlane &target)
+{
+	
+}
+
 
 //
 // This main file just outputs a few test images. You'll want to change it to do 
