@@ -408,7 +408,7 @@ int main(int argc, char *argv[])
 
 	// To print the values of an image use the following call	
 	//print_image_value(input_image);
-	cout <<  compare_image_value(input_image, input_image) << endl;
+	//cout <<  compare_image_value(input_image, input_image) << endl;
 	// test step 2 by applying mean filters to the input image
 	SDoublePlane mean_filter(3,3);
 	for(int i=0; i<3; i++)
