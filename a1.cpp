@@ -80,6 +80,17 @@ void  write_detection_txt(const string &filename, const vector<struct DetectedSy
 	}
 }
 
+void write_image(const string &filename, const SDoublePlane &input)
+{
+	SDoublePlane output_planes[3];
+	for(int i=0; i<3; i++)
+	{
+		output_planes[i] = input;
+	}
+	
+	SImageIO::write_png_file(filename.c_str(), output_planes[0], output_planes[1], output_planes[2]);
+}
+
 // Function that outputs a visualization of detected symbols
 void  write_detection_image(const string &filename, const vector<DetectedSymbol> &symbols, const SDoublePlane &input)
 {
@@ -192,6 +203,193 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 	return output;
 }
 
+// Get Hamming distance map
+SDoublePlane get_Hamming_distance(const SDoublePlane &input, const SDoublePlane &target)
+{
+	SDoublePlane output(input.rows(), input.cols());
+	
+	// change to convolution function later
+	for (int i = 0; i < input.rows(); i++)
+	{
+		for (int j = 0; j < input.cols(); j++)
+		{
+			double sum = 0;
+			for (int u = 0; u < target.rows(); u++)
+			{
+				for (int v = 0; v < target.cols(); v++)
+				{
+					int k = i + u, l = j + v;
+					if (k >= input.rows())
+					{
+						k = input.rows() - 1 - (k - input.rows() + 1);
+					}
+					if (l >= input.cols())
+					{
+						l = input.cols() - 1 - (l - input.cols() + 1);
+					}
+					double a = input[k][l] / 255;
+					double b = target[u][v] / 255;
+					sum += a * b;
+					sum += (1 - a) * (1 - b);
+				}
+			}
+			output[i][j] = sum / (target.rows() * target.cols()) * 255;
+		}
+	}
+	
+	return output;
+}
+
+double plane_max(const SDoublePlane &input)
+{
+	double max = 0;
+	for (int i = 0; i < input.rows(); i++)
+	{
+		for (int j = 0; j < input.cols(); j++)
+		{
+			if (input[i][j] > max)
+			{
+				max = input[i][j];
+			}
+		}
+	}
+	return max;
+}
+
+bool is_max_in_neighbour(const SDoublePlane &input, int y, int x, int w, int h)
+{
+	
+	int hw = w / 2;
+	int hh = h / 2;
+	
+	for (int i = -hh; i <= hh; i++)
+	{
+		for (int j = -hw; j <= hw; j++)
+		{
+			int k = y + i;
+			int l = x + j;
+			if (k < 0 || k >= input.rows())
+			{
+				continue;
+			}
+			if (l < 0 || l >= input.cols())
+			{
+				continue;
+			}
+			if (k == y && l == x)
+			{
+				continue;
+			}
+			if (input[k][l] > input[y][x])
+			{
+				return false;
+			}
+			else if (input[k][l] == input[y][x])
+			{
+				if (i < 0 || j < 0)
+				{
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+SDoublePlane non_maximum_suppress(const SDoublePlane &input, int w, int h)
+{
+	double threshold = 0.84 * 255;
+	SDoublePlane output(input.rows(), input.cols());
+	
+	for (int i = 0; i < input.rows(); i++)
+	{
+		for (int j = 0; j < input.cols(); j++)
+		{
+			if (input[i][j] > threshold &&
+					is_max_in_neighbour(input, i, j, w, h))
+			{
+				output[i][j] = 255;
+			}
+			else
+			{
+				output[i][j] = 0;
+			}
+		}
+	}
+	return output;
+}
+
+void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Type type, int w, int h)
+{
+	for (int i = 0; i < input.rows(); i++)
+	{
+		for (int j = 0; j < input.cols(); j++)
+		{
+			if (input[i][j] == 255)
+			{
+				DetectedSymbol s;
+				s.row = i;
+				s.col = j;
+				s.width = w;
+				s.height = h;
+				s.type = type;
+				s.confidence = 0;
+				s.pitch = 'A';
+				symbols.push_back(s);
+			}
+		}
+	}
+	return;
+}
+
+int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
+		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest, vector<DetectedSymbol> &symbols)
+{
+	// non-maximum suppress size
+	int sup_w,  sup_h;
+	
+	//shawn calc hamming distance
+	// get template image
+	SDoublePlane template_note = SImageIO::read_png_file("template1.png");
+	// get distance
+	SDoublePlane hammdis_note = get_Hamming_distance(input, template_note);
+	write_image("hamming_dist_note.png", hammdis_note);
+	// print_image_value(hammdis_note);
+	// cout << plane_max(hammdis_note) / 255 << endl;
+	// non-maximum suppress
+	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, template_note.cols(), template_note.rows());
+	write_image("sup_hamming_dist_note.png", sup_note);
+	get_symbols(sup_note, symbols, NOTEHEAD, template_note.cols(), template_note.rows());
+	
+	// quarter_rest
+	SDoublePlane template_quarterrest = SImageIO::read_png_file("template2.png");
+	// get distance
+	SDoublePlane hammdis_quarterrest = get_Hamming_distance(input, template_quarterrest);
+	write_image("hamming_dist_quarterrest.png", hammdis_quarterrest);
+	// cout << plane_max(hammdis_quarterrest) / 255 << endl;
+	// non-maximum suppress
+	SDoublePlane sup_quarterrest = non_maximum_suppress(hammdis_quarterrest, template_quarterrest.cols(), template_quarterrest.rows());
+	write_image("sup_hamming_dist_quarterrest.png", sup_quarterrest);
+	get_symbols(sup_quarterrest, symbols, QUARTERREST, template_quarterrest.cols(), template_quarterrest.rows());
+	
+	// quarter_rest
+	SDoublePlane template_eighthrest = SImageIO::read_png_file("template3.png");
+	// get distance
+	SDoublePlane hammdis_eighthrest = get_Hamming_distance(input, template_eighthrest);
+	write_image("hamming_dist_eighthrest.png", hammdis_eighthrest);
+	// cout << plane_max(hammdis_eighthrest) / 255 << endl;
+	// non-maximum suppress
+	SDoublePlane sup_eighthrest = non_maximum_suppress(hammdis_eighthrest, template_eighthrest.cols(), template_eighthrest.rows());
+	write_image("sup_hamming_dist_eighthrest.png", sup_eighthrest);
+	get_symbols(sup_eighthrest, symbols, EIGHTHREST, template_eighthrest.cols(), template_eighthrest.rows());
+
+	pl_note = sup_note;
+	pl_quarterrest = sup_quarterrest;
+	pl_eighthrest = sup_eighthrest;
+	
+	return 0;
+}
+
 
 //
 // This main file just outputs a few test images. You'll want to change it to do 
@@ -218,22 +416,28 @@ int main(int argc, char *argv[])
 			mean_filter[i][j] = 1/9.0;
 	SDoublePlane output_image = convolve_general(input_image, mean_filter);
 
+	//
+	SDoublePlane pl_note(input_image.rows(), input_image.cols());
+	SDoublePlane pl_quarterrest(input_image.rows(), input_image.cols());
+	SDoublePlane pl_eighthrest(input_image.rows(), input_image.cols());
+	
 
 	// randomly generate some detected symbols -- you'll want to replace this
 	//  with your symbol detection code obviously!
 	vector<DetectedSymbol> symbols;
-	for(int i=0; i<10; i++)
-	{
-		DetectedSymbol s;
-		s.row = rand() % input_image.rows();
-		s.col = rand() % input_image.cols();
-		s.width = 20;
-		s.height = 20;
-		s.type = (Type) (rand() % 3);
-		s.confidence = rand();
-		s.pitch = (rand() % 7) + 'A';
-		symbols.push_back(s);
-	}
+	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols);
+	// for(int i=0; i<10; i++)
+	// {
+		// DetectedSymbol s;
+		// s.row = rand() % input_image.rows();
+		// s.col = rand() % input_image.cols();
+		// s.width = 20;
+		// s.height = 20;
+		// s.type = (Type) (rand() % 3);
+		// s.confidence = rand();
+		// s.pitch = (rand() % 7) + 'A';
+		// symbols.push_back(s);
+	// }
 
 	//write_detection_txt("detected.txt", symbols);
 	//write_detection_image("detected.png", symbols, input_image);
