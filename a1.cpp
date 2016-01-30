@@ -172,9 +172,42 @@ SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &r
 SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &filter)
 {
 	SDoublePlane output(input.rows(), input.cols());
-
+	
+	/*int input1[5][5],count=0;
+	int i=0,j=0;
+	for(i=0;i<5;i++){
+	for(j=0;j<5;j++){
+	input1[i][j] = count++;
+	}}*/
 	// Convolution code here
-
+	int pixel_value=0;
+	int frow2,fcol2,frow,fcol;
+	
+	for(int irow=0;irow<input.rows();irow++){
+		for(int icol=0;icol<input.cols();icol++){
+			pixel_value=0;
+			for(frow=-filter.rows()/2,frow2=0;frow<=filter.rows()/2;frow++,frow2++){
+				for(fcol=-filter.cols()/2,fcol2=0;fcol<=filter.cols()/2;fcol++,fcol2++){
+					if( (irow+frow) >= 0 && (icol+fcol) >= 0 && (irow+frow) < input.rows() && (icol+fcol) < input.cols()){
+						pixel_value=pixel_value+(input[irow+frow][icol+fcol] * filter[frow2][fcol2]); 
+					}
+				}
+			}
+		output[irow][icol]=pixel_value;	
+		}	
+	}
+	/*for(i=0;i<5;i++){
+	for(j=0;j<5;j++){
+	cout<<input1[i][j]<<"\t";
+	}
+	cout<<endl;
+	}
+	cout<<endl;
+	for(i=0;i<5;i++){
+	for(j=0;j<5;j++){
+	cout<<output[i][j]<<"\t";
+	}
+	cout<<endl;}*/
 	return output;
 }
 
