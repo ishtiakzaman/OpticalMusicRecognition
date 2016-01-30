@@ -129,6 +129,22 @@ void print_image_value(const SDoublePlane &input)
 
 }
 
+// compare two image values 
+// returns true if they are similar, false otherwise
+bool compare_image_value(const SDoublePlane &image1, const SDoublePlane &image2)
+{
+	if (image1.rows() != image2.rows() || image1.cols() != image2.cols())
+		return false;
+	for (int i = 0; i < image1.rows(); ++i)
+	{
+		for (int j = 0; j < image1.cols(); ++j)
+		{
+			if (image1[i][j] != image2[i][j])
+				return false;	
+		}
+	}
+	return true;
+}
 // Convolve an image with a separable convolution kernel
 //
 SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &row_filter, const SDoublePlane &col_filter)
@@ -194,7 +210,7 @@ int main(int argc, char *argv[])
 
 	// To print the values of an image use the following call	
 	//print_image_value(input_image);
-
+	cout <<  compare_image_value(input_image, input_image) << endl;
 	// test step 2 by applying mean filters to the input image
 	SDoublePlane mean_filter(3,3);
 	for(int i=0; i<3; i++)
@@ -219,6 +235,6 @@ int main(int argc, char *argv[])
 		symbols.push_back(s);
 	}
 
-	write_detection_txt("detected.txt", symbols);
-	write_detection_image("detected.png", symbols, input_image);
+	//write_detection_txt("detected.txt", symbols);
+	//write_detection_image("detected.png", symbols, input_image);
 }
