@@ -173,12 +173,6 @@ SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &fil
 {
 	SDoublePlane output(input.rows(), input.cols());
 	
-	/*int input1[5][5],count=0;
-	int i=0,j=0;
-	for(i=0;i<5;i++){
-	for(j=0;j<5;j++){
-	input1[i][j] = count++;
-	}}*/
 	// Convolution code here
 	int pixel_value=0;
 	int frow2,fcol2,frow,fcol;
@@ -196,18 +190,7 @@ SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &fil
 		output[irow][icol]=pixel_value;	
 		}	
 	}
-	/*for(i=0;i<5;i++){
-	for(j=0;j<5;j++){
-	cout<<input1[i][j]<<"\t";
-	}
-	cout<<endl;
-	}
-	cout<<endl;
-	for(i=0;i<5;i++){
-	for(j=0;j<5;j++){
-	cout<<output[i][j]<<"\t";
-	}
-	cout<<endl;}*/
+	
 	return output;
 }
 
