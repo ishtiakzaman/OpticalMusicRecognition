@@ -286,8 +286,8 @@ SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 }
 
 // Apply an edge detector to an image, returns the binary edge map
-// 
-SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
+// Pass thresh=0 to ignore binary map, else pass thresh [1-255]
+SDoublePlane find_edges(const SDoublePlane &input, int thresh=0)
 {	
 	SDoublePlane G(input.rows(), input.cols());
 	SDoublePlane Gx, Gy;
@@ -302,6 +302,13 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);						
 			if (G[i][j] > 255) G[i][j] = 255;			
 		}
+	}
+
+	if (thresh != 0)
+	{
+		for (int i = 0; i < G.rows(); ++i)		
+			for (int j = 0; j < G.cols(); ++j)
+				G[i][j] = (G[i][j]>thresh?255:0);
 	}
 
 	return G;
@@ -546,10 +553,10 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 5 //////////
-	/*
-	write_image("edges.png", find_edges(input_image));
+	
+	write_image("edges.png", find_edges(input_image, 30));
 	
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");
 	write_image("edge2.png", find_edges(template_image));
-	*/
+	
 }
