@@ -3,6 +3,7 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <fstream>
 #include <vector>
 #include <DrawText.h>
@@ -230,7 +231,7 @@ SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &fil
 }
 
 // Clamp all pixel values within 0-255
-void clampImage(const SDoublePlane &input)
+void clamp_image(const SDoublePlane &input)
 {
 	double min = input[0][0], max = input[0][0];
 	for (int i = 0; i < input.rows(); ++i)
@@ -298,9 +299,8 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 	{
 		for (int j = 0; j < input.cols(); ++j)
 		{
-			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);			
-			if (G[i][j] > 255) G[i][j] = 255;
-			if (G[i][j] < 0) G[i][j] = 0;
+			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);						
+			if (G[i][j] > 255) G[i][j] = 255;			
 		}
 	}
 
@@ -509,25 +509,23 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-
-	// To print the values of an image use the following call	
-	//print_image_value(input_image);
-	//cout <<  compare_image_value(input_image, input_image) << endl;
-	// test step 2 by applying mean filters to the input image
+	
+	
+	/////////// Step 2 //////////
+	/*
 	SDoublePlane mean_filter(3,3);
 	for(int i=0; i<3; i++)
 		for(int j=0; j<3; j++)
 			mean_filter[i][j] = 1/9.0;
 	SDoublePlane output_image = convolve_general(input_image, mean_filter);
-	
-	//
+	*/
+
+	////////// Step 4 //////////
+	/*	
 	SDoublePlane pl_note(input_image.rows(), input_image.cols());
 	SDoublePlane pl_quarterrest(input_image.rows(), input_image.cols());
 	SDoublePlane pl_eighthrest(input_image.rows(), input_image.cols());
-	
-
-	// randomly generate some detected symbols -- you'll want to replace this
-	//  with your symbol detection code obviously!
+		
 	vector<DetectedSymbol> symbols;
 	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols);
 	// for(int i=0; i<10; i++)
@@ -545,4 +543,13 @@ int main(int argc, char *argv[])
 
 	//write_detection_txt("detected.txt", symbols);
 	//write_detection_image("detected.png", symbols, input_image);	
+	*/
+
+	////////// Step 5 //////////
+	/*
+	write_image("edges.png", find_edges(input_image));
+	
+	SDoublePlane template_image= SImageIO::read_png_file("template1.png");
+	write_image("edge2.png", find_edges(template_image));
+	*/
 }
