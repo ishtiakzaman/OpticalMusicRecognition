@@ -240,9 +240,25 @@ SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &f
 SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &filter)
 {
 	SDoublePlane output(input.rows(), input.cols());
-
+	
 	// Convolution code here
-
+	int pixel_value=0;
+	int frow2,fcol2,frow,fcol;
+	
+	for(int irow=0;irow<input.rows();irow++){
+		for(int icol=0;icol<input.cols();icol++){
+			pixel_value=0;
+			for(frow=-filter.rows()/2,frow2=0;frow<=filter.rows()/2;frow++,frow2++){
+				for(fcol=-filter.cols()/2,fcol2=0;fcol<=filter.cols()/2;fcol++,fcol2++){
+					if( (irow+frow) >= 0 && (icol+fcol) >= 0 && (irow+frow) < input.rows() && (icol+fcol) < input.cols()){
+						pixel_value=pixel_value+(input[irow+frow][icol+fcol] * filter[frow2][fcol2]); 
+					}
+				}
+			}
+		output[irow][icol]=pixel_value;	
+		}	
+	}
+	
 	return output;
 }
 
