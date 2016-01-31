@@ -86,8 +86,7 @@ void write_image(const string &filename, const SDoublePlane &input)
 	for(int i=0; i<3; i++)
 	{
 		output_planes[i] = input;
-	}
-	
+	}	
 	SImageIO::write_png_file(filename.c_str(), output_planes[0], output_planes[1], output_planes[2]);
 }
 
@@ -203,39 +202,7 @@ SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &r
 	return output;
 }
 
-
-// Convolve an image with separable convolution kernel
-SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &filter)
-{
-	SDoublePlane row_filter(1, filter.cols());
-	SDoublePlane col_filter(filter.rows(), 1);
-	
-	// Generating the row_filter
-	for (int i = 0; i < filter.cols(); ++i)
-	{
-		double sum = 0.0;
-		for (int j = 0; j < filter.rows(); ++j)
-		{
-			sum += filter[j][i];
-		}
-		row_filter[0][i] = sum;
-	}
-	
-	// Generating the col_filter
-	for (int i = 0; i < filter.rows(); ++i)
-	{
-		double sum = 0.0;
-		for (int j = 0; j < filter.cols(); ++j)
-		{
-			sum += filter[i][j];
-		}
-		col_filter[i][0] = sum;
-	}
-	
-	return convolve_separable(input, row_filter, col_filter);	
-}
-
-// Convolve an image with a separable convolution kernel
+// Convolve an image with a general convolution kernel
 //
 SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &filter)
 {
@@ -262,17 +229,60 @@ SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &fil
 	return output;
 }
 
+// Clamp all pixel values within 0-255
+void clampImage(const SDoublePlane &input)
+{
+	double min = input[0][0], max = input[0][0];
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			if (input[i][j] > max)
+				max = input[i][j];
+			else if (input[i][j] < min)
+				min = input[i][j];
+		}
+	}
+
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			input[i][j] = ((input[i][j]-min)/(max-min))*255;
+		}
+	}
+}
 
 // Apply a sobel operator to an image, returns the result
-// 
+// _gx=true for horizontal gradient, false for vertical gradient
 SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 {
 	SDoublePlane output(input.rows(), input.cols());
+	SDoublePlane row_filter(1, 3), col_filter(3, 1);
+	if (_gx)
+	{
+		row_filter[0][0] = -1.0;
+		row_filter[0][1] = 0.0;	
+		row_filter[0][2] = 1.0;
+			
+		col_filter[0][0] = 1.0/8.0;
+		col_filter[1][0] = 2.0/8.0;	
+		col_filter[2][0] = 1.0/8.0;
+	}
+	else
+	{
+		row_filter[0][0] = 1.0/8.0;
+		row_filter[0][1] = 2.0/8.0;
+		row_filter[0][2] = 1.0/8.0;
+			
+		col_filter[0][0] = 1.0;
+		col_filter[1][0] = 0.0;	
+		col_filter[2][0] = -1.0;	
+	}	
 
-	// Implement a sobel gradient estimation filter with 1-d filters
-
-
-	return output;
+	SDoublePlane sobel = convolve_separable(input, row_filter, col_filter);
+	clampImage(sobel);	
+	return sobel;
 }
 
 // Apply an edge detector to an image, returns the binary edge map
@@ -498,7 +508,7 @@ int main(int argc, char *argv[])
 	for(int i=0; i<3; i++)
 		for(int j=0; j<3; j++)
 			mean_filter[i][j] = 1/9.0;
-	//SDoublePlane output_image = convolve_general(input_image, mean_filter);
+	SDoublePlane output_image = convolve_general(input_image, mean_filter);
 	
 	//
 	SDoublePlane pl_note(input_image.rows(), input_image.cols());
@@ -524,5 +534,5 @@ int main(int argc, char *argv[])
 	// }
 
 	//write_detection_txt("detected.txt", symbols);
-	//write_detection_image("detected.png", symbols, input_image);
+	//write_detection_image("detected.png", symbols, input_image);	
 }
