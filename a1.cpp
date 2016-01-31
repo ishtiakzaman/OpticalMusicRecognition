@@ -313,6 +313,10 @@ SDoublePlane find_edges(const SDoublePlane &input, int thresh=0)
 
 	return G;
 }
+SDoublePlane hough_transform(const SDoublePlane &edges)
+{
+return edges;
+}
 
 // Get Hamming distance map
 SDoublePlane get_Hamming_distance(const SDoublePlane &input, const SDoublePlane &target)
