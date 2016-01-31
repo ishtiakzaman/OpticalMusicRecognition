@@ -156,15 +156,83 @@ bool compare_image_value(const SDoublePlane &image1, const SDoublePlane &image2)
 	}
 	return true;
 }
+
 // Convolve an image with a separable convolution kernel
-//
 SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &row_filter, const SDoublePlane &col_filter)
 {
 	SDoublePlane output(input.rows(), input.cols());
+	SDoublePlane temp(input.rows(), input.cols());
 
-	// Convolution code here
+	// convolve with row filter
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+				
+			double sum = 0.0;
+			for (int k = 0; k < row_filter.cols(); ++k)
+			{
+				int l = j + row_filter.cols()/2 - k;
+				// Doing reflection if out of boundary
+				if (l < 0) l = -l;
+				if (l >= input.cols()) l = 2 * input.cols() - l - 1;
+				sum += row_filter[0][k] * input[i][l];
+			}
+			temp[i][j] = sum;
+		}
+	}
+	
+	// convolve with col filter
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			double sum = 0.0;
+			for (int k = 0; k < col_filter.rows(); ++k)
+			{
+				int l = i + col_filter.rows()/2 - k;
+				// Doing reflection if out of boundary
+				if (l < 0) l = -l;
+				if (l >= input.rows()) l = 2 * input.rows() - l - 1;
+				sum += col_filter[k][0] * temp[l][j];
+			}
+			output[i][j] = sum;
+		}
+	}
 
 	return output;
+}
+
+
+// Convolve an image with separable convolution kernel
+SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &filter)
+{
+	SDoublePlane row_filter(1, filter.cols());
+	SDoublePlane col_filter(filter.rows(), 1);
+	
+	// Generating the row_filter
+	for (int i = 0; i < filter.cols(); ++i)
+	{
+		double sum = 0.0;
+		for (int j = 0; j < filter.rows(); ++j)
+		{
+			sum += filter[j][i];
+		}
+		row_filter[0][i] = sum;
+	}
+	
+	// Generating the col_filter
+	for (int i = 0; i < filter.rows(); ++i)
+	{
+		double sum = 0.0;
+		for (int j = 0; j < filter.cols(); ++j)
+		{
+			sum += filter[i][j];
+		}
+		col_filter[i][0] = sum;
+	}
+	
+	return convolve_separable(input, row_filter, col_filter);	
 }
 
 // Convolve an image with a separable convolution kernel
@@ -414,8 +482,8 @@ int main(int argc, char *argv[])
 	for(int i=0; i<3; i++)
 		for(int j=0; j<3; j++)
 			mean_filter[i][j] = 1/9.0;
-	SDoublePlane output_image = convolve_general(input_image, mean_filter);
-
+	//SDoublePlane output_image = convolve_general(input_image, mean_filter);
+	
 	//
 	SDoublePlane pl_note(input_image.rows(), input_image.cols());
 	SDoublePlane pl_quarterrest(input_image.rows(), input_image.cols());
