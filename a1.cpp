@@ -280,21 +280,31 @@ SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 		col_filter[2][0] = -1.0;	
 	}	
 
-	SDoublePlane sobel = convolve_separable(input, row_filter, col_filter);
-	clampImage(sobel);	
+	SDoublePlane sobel = convolve_separable(input, row_filter, col_filter);	
 	return sobel;
 }
 
 // Apply an edge detector to an image, returns the binary edge map
 // 
 SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
-{
-	SDoublePlane output(input.rows(), input.cols());
+{	
+	SDoublePlane G(input.rows(), input.cols());
+	SDoublePlane Gx, Gy;
 
-	// Implement an edge detector of your choice, e.g.
-	// use your sobel gradient operator to compute the gradient magnitude and threshold
+	Gx = sobel_gradient_filter(input, true);
+	Gy = sobel_gradient_filter(input, false);
+	
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);			
+			if (G[i][j] > 255) G[i][j] = 255;
+			if (G[i][j] < 0) G[i][j] = 0;
+		}
+	}
 
-	return output;
+	return G;
 }
 
 // Get Hamming distance map
