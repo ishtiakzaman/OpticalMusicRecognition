@@ -6,6 +6,8 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <queue>
+#include <utility>
 #include <DrawText.h>
 
 using namespace std;
@@ -133,7 +135,7 @@ void print_image_value(const SDoublePlane &input)
 	{
 		for (int j = 0; j < input.cols(); ++j)
 		{
-			cout << input[i][j] << " ";
+			cout << input[i][j] << " ";			
 		}
 		cout << endl;
 	}
@@ -287,7 +289,7 @@ SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 
 // Apply an edge detector to an image, returns the binary edge map
 // Pass thresh=0 to ignore binary map, else pass thresh [1-255]
-SDoublePlane find_edges(const SDoublePlane &input, int thresh=0)
+SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 {	
 	SDoublePlane G(input.rows(), input.cols());
 	SDoublePlane Gx, Gy;
@@ -304,18 +306,86 @@ SDoublePlane find_edges(const SDoublePlane &input, int thresh=0)
 		}
 	}
 
-	if (thresh != 0)
+	if (abs(thresh) > 0.0001)
 	{
 		for (int i = 0; i < G.rows(); ++i)		
 			for (int j = 0; j < G.cols(); ++j)
-				G[i][j] = (G[i][j]>thresh?255:0);
+				G[i][j] = (G[i][j]>thresh?1:0);
 	}
 
 	return G;
 }
+
+struct compare_priority_queue
+{
+	bool operator()(const pair<int,double> &lhs, const pair<int,double> &rhs) const
+	{
+		return rhs.second < lhs.second;
+	}
+};
+
+SDoublePlane compute_distance_matrix(SDoublePlane &edge_map)
+{
+	SDoublePlane D(edge_map.rows(), edge_map.cols());	
+
+	// Do a dijkstra in O(nlgn), n=total number of pixel in edge_map	
+	priority_queue< pair<int,double>, vector< pair<int,double> >, compare_priority_queue> Q;
+	const int n_col = D.cols();
+	const int n_row = D.rows();
+	for (int i = 0; i < n_row; ++i)		
+	{
+		for (int j = 0; j < n_col; ++j)
+		{			
+			if (abs(edge_map[i][j] - 1) < 0.0001)
+			{
+				D[i][j] = 0;
+				Q.push(make_pair(i*n_col+j, 0.0));
+			}
+			else
+				D[i][j] = -1;
+		}
+	}
+	
+	while (Q.empty() == false)
+	{
+		pair<int,double> u = Q.top();		
+		int row = u.first / n_col;
+		int col = u.first % n_col;
+		double w;
+		Q.pop();
+		for (int i = -1; i <= 1; ++i)
+		{
+			for (int j = -1; j <= 1; ++j)
+			{
+				if (row+i<0 || row+i>=n_row || col+j<0 || col+j>=n_col || (i==0 && j==0))
+					continue;
+
+				w = (i*j==0?1:1.414);
+				if ( abs(D[row+i][col+j]+1) < 0.0001 || D[row+i][col+j] > D[row][col] + w)
+				{
+					D[row+i][col+j] = D[row][col] + w;
+					Q.push( make_pair( (row+i)*n_col+(col+j), D[row+i][col+j] ) );
+				}
+			}
+		}
+	}
+	
+	return D;
+}
+
+// Match template using edge detection method
+void match_template_by_edge(const SDoublePlane &input, double thresh=0)
+{
+	// Compute binary edge map with thresh value
+	SDoublePlane edge_map = find_edges(input, thresh);
+
+	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
+	SDoublePlane D = compute_distance_matrix(edge_map);	
+}
+
 SDoublePlane hough_transform(const SDoublePlane &edges)
 {
-return edges;
+	return edges;
 }
 
 // Get Hamming distance map
@@ -557,10 +627,12 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 5 //////////
-	
+	/*
 	write_image("edges.png", find_edges(input_image, 30));
 	
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");
 	write_image("edge2.png", find_edges(template_image));
-	
+
+	match_template_by_edge(template_image, 30);
+	*/
 }
