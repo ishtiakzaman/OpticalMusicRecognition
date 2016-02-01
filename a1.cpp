@@ -374,13 +374,56 @@ SDoublePlane compute_distance_matrix(SDoublePlane &edge_map)
 }
 
 // Match template using edge detection method
-void match_template_by_edge(const SDoublePlane &input, double thresh=0)
+vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const SDoublePlane &template_image,
+												double edge_threshold, double score_threshold)
 {
-	// Compute binary edge map with thresh value
-	SDoublePlane edge_map = find_edges(input, thresh);
+	// Compute binary edge map with threshold value
+	SDoublePlane edge_map = find_edges(input, edge_threshold);
+	SDoublePlane edge_map_template = find_edges(template_image, edge_threshold);
 
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
-	SDoublePlane D = compute_distance_matrix(edge_map);	
+	SDoublePlane D = compute_distance_matrix(edge_map);
+
+	SDoublePlane score(input.rows(), input.cols());
+
+	vector<DetectedSymbol> symbols;
+
+	for (int i = 0; i < input.rows(); ++i)	
+		for (int j = input.cols()-template_image.cols()+1; j < input.cols(); ++j)
+			score[i][j] = -1;
+
+	for (int i = input.rows()-template_image.rows()+1; i < input.rows(); ++i)	
+		for (int j = 0; j < input.cols(); ++j)
+			score[i][j] = -1;
+
+	for (int i = 0; i < input.rows()-template_image.rows()+1; ++i)
+	{
+		for (int j = 0; j < input.cols()-template_image.cols()+1; ++j)
+		{			
+			for (int k = 0; k < template_image.rows(); ++k)
+			{
+				for (int l = 0; l < template_image.cols(); ++l)	
+				{
+					score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
+				}
+			}
+
+			if (score[i][j] < score_threshold)
+			{
+				DetectedSymbol s;
+				s.row = i;
+				s.col = j;
+				s.width = 17;
+				s.height = 11;
+				s.type = (Type) (0);
+				s.confidence = rand();
+				s.pitch = (rand() % 7) + 'A';
+				symbols.push_back(s);
+			}
+		}
+	}
+
+	return symbols;
 }
 
 SDoublePlane hough_transform(const SDoublePlane &edges)
@@ -627,12 +670,9 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 5 //////////
-	/*
-	write_image("edges.png", find_edges(input_image, 30));
 	
-	SDoublePlane template_image= SImageIO::read_png_file("template1.png");
-	write_image("edge2.png", find_edges(template_image));
-
-	match_template_by_edge(template_image, 30);
-	*/
+	write_image("edges.png", find_edges(input_image, 30));	
+	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
+	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
+	write_detection_image("detected.png", symbols, input_image);	
 }
