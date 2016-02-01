@@ -129,6 +129,20 @@ void  write_detection_image(const string &filename, const vector<DetectedSymbol>
 //
 // Print the value of the image
 //
+void print_image_value1(const SDoublePlane &input)
+{	int sum=0;
+	for (int i = 0; i < input.cols(); ++i)
+	{	sum=0;
+		for (int j = 0; j < input.rows(); ++j)
+		{	sum=sum+input[j][i];
+			//cout << input[i][j] << " ";			
+		}
+		//cout << endl;
+		cout<<sum<<"|||"<<i<<endl;
+	}
+
+}
+
 void print_image_value(const SDoublePlane &input)
 {
 	for (int i = 0; i < input.rows(); ++i)
@@ -452,21 +466,56 @@ SDoublePlane normalize_votes(const SDoublePlane &acc)
 	}
 	return normalized;
 }
-SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=120.0)
+int find_best_spacing(const SDoublePlane &row_spacing)
+{
+	long max=0,sum=0;
+	int best_space=0;
+	for(int i=0;i<row_spacing.cols();i++){
+		sum=0;
+		for(int j=0;j<row_spacing.rows();j++){
+			sum=sum+row_spacing[j][i];
+		}
+		if(sum > max){
+			max=sum;
+			best_space=i;
+		}
+	}
+	return best_space;
+}
+SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=0)
 {
         SDoublePlane accumulator(edges.rows(),1);
+		
+	SDoublePlane row_spacing(edges.rows(),edges.rows());
+	
+	 for(int i=0;i<edges.rows();i++){
+                for(int j=0;j<edges.cols();j++){
+                        if(edges[i][j] > threshold){
+
+                        	accumulator[i][0]=accumulator[i][0] + 1;
+                                
+                        }
+                }
+        }
+	
+	SDoublePlane normed_votes=normalize_votes(accumulator);
 
         for(int i=0;i<edges.rows();i++){
                 for(int j=0;j<edges.cols();j++){
                         if(edges[i][j] > threshold){
-
-                                accumulator[i][0]=accumulator[i][0] + 1;
-
+	
+      				for(int z=i-1;z>=0;z--){
+					if(normed_votes[z][0]>=0.9 && (i-z)>2)row_spacing[z][i-z]++;
+				}
                         }
                 }
         }
-        
-        return accumulator;
+	//for(int i=0;i<row_spacing.rows();i++){
+	//cout<<row_spacing[i][12]<<endl;
+	//}
+	//print_image_value1(row_spacing);
+	int best_space=find_best_spacing(row_spacing);
+	return accumulator;
 }
 
 // Get Hamming distance map
@@ -671,7 +720,11 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-
+	
+	//test
+	SDoublePlane acc=hough_transform(find_edges(input_image));
+	
+	//testend
 	/////////// Step 2 //////////
 	/*
 	SDoublePlane mean_filter(3,3);
@@ -708,7 +761,8 @@ int main(int argc, char *argv[])
 
 	////////// Step 5 //////////
 	
-	write_image("edges.png", find_edges(input_image, 30));	
+	write_image("edges.png", find_edges(input_image));
+		
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
 	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
 	write_detection_image("detected.png", symbols, input_image);	
