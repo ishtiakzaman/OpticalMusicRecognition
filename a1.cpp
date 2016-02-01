@@ -465,7 +465,7 @@ SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=120.0)
                         }
                 }
         }
-        print_image_value(normalize_votes(accumulator));
+        
         return accumulator;
 }
 
@@ -671,9 +671,7 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-	//test	
-	SDoublePlane acc=hough_transform(find_edges(non_maximum_suppress(input_image,1,1)));
-	//test end
+
 	/////////// Step 2 //////////
 	/*
 	SDoublePlane mean_filter(3,3);
