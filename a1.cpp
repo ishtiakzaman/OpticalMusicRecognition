@@ -383,9 +383,47 @@ void match_template_by_edge(const SDoublePlane &input, double thresh=0)
 	SDoublePlane D = compute_distance_matrix(edge_map);	
 }
 
-SDoublePlane hough_transform(const SDoublePlane &edges)
+double find_max_vote(const SDoublePlane &acc)
 {
-	return edges;
+	double max=0;
+	for(int i=0;i<acc.rows();i++){
+		if(acc[i][0] > max)max=acc[i][0];
+	}
+	return max;
+}
+double find_min_vote(const SDoublePlane &acc)
+{
+	double min=acc[0][0];
+	for(int i=1;i<acc.rows();i++){
+		if(acc[i][0] < min ) min=acc[i][0]; 
+	}
+	return min;
+}
+SDoublePlane normalize_votes(const SDoublePlane &acc)
+{
+	SDoublePlane normalized(acc.rows(),acc.cols());
+	double min = find_min_vote(acc);
+	double max = find_max_vote(acc);
+	for(int i=0;i<acc.rows();i++){
+		normalized[i][0] = (acc[i][0] - min)/(max-min);
+	}
+	return normalized;
+}
+SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=120.0)
+{
+        SDoublePlane accumulator(edges.rows(),1);
+
+        for(int i=0;i<edges.rows();i++){
+                for(int j=0;j<edges.cols();j++){
+                        if(edges[i][j] > threshold){
+
+                                accumulator[i][0]=accumulator[i][0] + 1;
+
+                        }
+                }
+        }
+        print_image_value(normalize_votes(accumulator));
+        return accumulator;
 }
 
 // Get Hamming distance map
@@ -590,8 +628,9 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-	
-	
+	//test	
+	SDoublePlane acc=hough_transform(find_edges(non_maximum_suppress(input_image,1,1)));
+	//test end
 	/////////// Step 2 //////////
 	/*
 	SDoublePlane mean_filter(3,3);
