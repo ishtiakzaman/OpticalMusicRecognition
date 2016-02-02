@@ -841,7 +841,7 @@ int main(int argc, char *argv[])
 
 	////////// Step 5 //////////
 	
-	write_image("edges.png", non_maximum_suppress(find_edges(input_image),2,2));
+	write_image("edges.png", non_maximum_suppress(find_edges(input_image),0.7*255,2,2));
 		
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
 	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
