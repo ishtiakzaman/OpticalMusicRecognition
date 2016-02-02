@@ -9,6 +9,7 @@
 #include <queue>
 #include <utility>
 #include <DrawText.h>
+#include <set>
 
 using namespace std;
 
@@ -466,6 +467,61 @@ SDoublePlane normalize_votes(const SDoublePlane &acc)
 	}
 	return normalized;
 }
+SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercept_value,int staff_number)
+{
+        set<int> row_nums;
+        int last_row=0;
+
+        for(int i=0;i<5;i++){
+                row_nums.insert(intercept_value + (i*best_space) );
+                last_row=intercept_value+(i*best_space);
+        }
+
+        for(int j=staff_number;j<=last_row;j++){
+		if(j <row_votes.rows()){
+                	if(row_nums.count(j) == 1){
+                        	row_votes[j][best_space]=255;
+                	}
+                	else{
+                        	row_votes[j][best_space]=0;
+                	}		
+        		}		
+	}
+
+
+
+        return row_votes;
+}
+SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,int neighbour_threshold=4,int start=0)
+{	SDoublePlane row_spacing=row_votes;
+	if(start < row_votes.rows()){
+        SDoublePlane staff_lines(row_votes.rows(),1);
+	int i=0;	
+	double best_value=0;
+        int intercept_value=0;
+        while(i<row_votes.rows()){
+                if(row_votes[i][best_space] > 0){
+                        best_value=normed_votes[i][0];
+                        intercept_value=i;
+			for(int j=1;j<4;j++){
+                                if(normed_votes[i+j][0] > best_value){
+                                        best_value=normed_votes[i+j][0];
+                                        intercept_value=i+j;
+                                }
+                        }
+		row_spacing=set_staff(row_spacing,best_space,intercept_value,start);
+                i=intercept_value+(4*(best_space))+4;
+		start=intercept_value+(4*best_space)+4;
+
+                }
+		//row_spacing=set_staff(row_spacing,best_space,intercept_value,start);
+                //break;
+     		i++;
+        }
+	//row_spacing=find_best_line_intercepts(row_spacing,normed_votes,best_space,neighbour_threshold,intercept_value+1+(4*best_space));
+        }
+	return row_spacing;
+}
 int find_best_spacing(const SDoublePlane &row_spacing)
 {
 	long max=0,sum=0;
@@ -482,7 +538,7 @@ int find_best_spacing(const SDoublePlane &row_spacing)
 	}
 	return best_space;
 }
-SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=0)
+pair<SDoublePlane,int> hough_transform(const SDoublePlane &edges,double threshold=0)
 {
         SDoublePlane accumulator(edges.rows(),1);
 		
@@ -515,7 +571,26 @@ SDoublePlane hough_transform(const SDoublePlane &edges,double threshold=0)
 	//}
 	//print_image_value1(row_spacing);
 	int best_space=find_best_spacing(row_spacing);
-	return accumulator;
+	//cout<<best_space;
+	SDoublePlane best_row_intercepts= find_best_line_intercepts(row_spacing,normed_votes,best_space);
+	for(int i=0;i<best_row_intercepts.rows();i++){
+	accumulator[i][0]=best_row_intercepts[i][best_space];
+	}
+	return make_pair(accumulator,best_space);
+}
+
+SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input)
+{
+	SDoublePlane lines(input.rows(),input.cols());
+
+	for(int i=0;i<acc.rows();i++){
+		if(acc[i][0] == 255){
+			for(int j=0;j<input.cols();j++){
+				lines[i][j]=255;
+			}
+		}
+	}
+	return lines;
 }
 
 // Get Hamming distance map
@@ -722,8 +797,13 @@ int main(int argc, char *argv[])
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
 	
 	//test
-	SDoublePlane acc=hough_transform(find_edges(input_image));
-	
+	//SDoublePlane acc=hough_transform(find_edges(input_image));
+	//SDoublePlane lines=get_lines(acc,input_image);
+	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+	pair<SDoublePlane,int> intercept_space=hough_transform(find_edges(input_image));
+	SDoublePlane lines=get_lines(intercept_space.first,input_image);
+	SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+	//
 	//testend
 	/////////// Step 2 //////////
 	/*
@@ -761,7 +841,7 @@ int main(int argc, char *argv[])
 
 	////////// Step 5 //////////
 	
-	write_image("edges.png", find_edges(input_image));
+	write_image("edges.png", non_maximum_suppress(find_edges(input_image),2,2));
 		
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
 	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
