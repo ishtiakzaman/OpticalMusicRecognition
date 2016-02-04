@@ -13,6 +13,8 @@
 
 using namespace std;
 
+#define PI 3.14159
+
 // The simple image class is called SDoublePlane, with each pixel represented as
 // a double (floating point) type. This means that an SDoublePlane can represent
 // values outside the range 0-255, and thus can represent squared gradient magnitudes,
@@ -364,9 +366,12 @@ SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 
 // Apply an edge detector to an image, returns the binary edge map
 // Pass thresh=0 to ignore binary map, else pass thresh [1-255]
-SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
+// white_value only applies when thresh!=0, pass 1 for 0-1 image, or 255 for 0-255 binary image
+// Returns edge_map and gradient_angle
+pair<SDoublePlane, SDoublePlane> find_edges(const SDoublePlane &input, double thresh=0, double white_value=1)
 {	
 	SDoublePlane G(input.rows(), input.cols());
+	SDoublePlane Rotation(input.rows(), input.cols());
 	SDoublePlane Gx, Gy;
 
 	Gx = sobel_gradient_filter(input, true);
@@ -378,6 +383,10 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 		{
 			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);						
 			if (G[i][j] > 255) G[i][j] = 255;			
+			if ( abs(Gx[i][j]) < 0.0001)
+				Rotation[i][j] = PI / 2.0;
+			else
+				Rotation[i][j] = atan(Gy[i][j] / Gx[i][j]);
 		}
 	}
 
@@ -385,10 +394,10 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 	{
 		for (int i = 0; i < G.rows(); ++i)		
 			for (int j = 0; j < G.cols(); ++j)
-				G[i][j] = (G[i][j]>thresh?1:0);
+				G[i][j] = (G[i][j]>thresh?white_value:0);
 	}
 
-	return G;
+	return make_pair(G, Rotation);
 }
 
 struct compare_priority_queue
@@ -453,8 +462,8 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const S
 												double edge_threshold, double score_threshold)
 {
 	// Compute binary edge map with threshold value
-	SDoublePlane edge_map = find_edges(input, edge_threshold);
-	SDoublePlane edge_map_template = find_edges(template_image, edge_threshold);
+	SDoublePlane edge_map = find_edges(input, edge_threshold).first;
+	SDoublePlane edge_map_template = find_edges(template_image, edge_threshold).first;
 
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
 	SDoublePlane D = compute_distance_matrix(edge_map);
@@ -509,6 +518,7 @@ double find_max_vote(const SDoublePlane &acc)
 	}
 	return max;
 }
+
 double find_min_vote(const SDoublePlane &acc)
 {
 	double min=acc[0][0];
@@ -517,6 +527,7 @@ double find_min_vote(const SDoublePlane &acc)
 	}
 	return min;
 }
+
 SDoublePlane normalize_votes(const SDoublePlane &acc)
 {
 	SDoublePlane normalized(acc.rows(),acc.cols());
@@ -527,6 +538,7 @@ SDoublePlane normalize_votes(const SDoublePlane &acc)
 	}
 	return normalized;
 }
+
 SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercept_value,int staff_number)
 {
         set<int> row_nums;
@@ -538,20 +550,19 @@ SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercep
         }
 
         for(int j=staff_number;j<=last_row;j++){
-		if(j <row_votes.rows()){
-                	if(row_nums.count(j) == 1){
-                        	row_votes[j][best_space]=255;
-                	}
-                	else{
-                        	row_votes[j][best_space]=0;
-                	}		
-        		}		
-	}
-
-
+			if(j <row_votes.rows()){
+            	if(row_nums.count(j) == 1){
+                    	row_votes[j][best_space]=255;
+            	}
+            	else{
+                    	row_votes[j][best_space]=0;
+            	}		
+    		}		
+		}
 
         return row_votes;
 }
+
 SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,int neighbour_threshold=4,int start=0)
 {	SDoublePlane row_spacing=row_votes;
 	if(start < row_votes.rows()){
@@ -582,6 +593,7 @@ SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoub
         }
 	return row_spacing;
 }
+
 int find_best_spacing(const SDoublePlane &row_spacing)
 {
 	long max=0,sum=0;
@@ -598,9 +610,10 @@ int find_best_spacing(const SDoublePlane &row_spacing)
 	}
 	return best_space;
 }
+
 pair<SDoublePlane,int> hough_transform(const SDoublePlane &edges,double threshold=0)
 {
-        SDoublePlane accumulator(edges.rows(),1);
+    SDoublePlane accumulator(edges.rows(),1);
 		
 	SDoublePlane row_spacing(edges.rows(),edges.rows());
 	
@@ -857,12 +870,12 @@ int main(int argc, char *argv[])
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
 	
 	//test
-	//SDoublePlane acc=hough_transform(find_edges(input_image));
+	//SDoublePlane acc=hough_transform(find_edges(input_image).first);
 	//SDoublePlane lines=get_lines(acc,input_image);
 	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
-	pair<SDoublePlane,int> intercept_space=hough_transform(find_edges(input_image));
-	SDoublePlane lines=get_lines(intercept_space.first,input_image);
-	SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+	pair<SDoublePlane,int> intercept_space = hough_transform(find_edges(input_image).first);
+	SDoublePlane lines = get_lines(intercept_space.first, input_image);
+	SImageIO::write_png_file("lines1.png", input_image, lines, lines);
 	//
 	//testend
 	/////////// Step 2 //////////
@@ -904,7 +917,8 @@ int main(int argc, char *argv[])
 
 	////////// Step 5 //////////
 	
-	write_image("edges.png", non_maximum_suppress(find_edges(input_image),0.7*255,2,2));
+	write_image("edges1.png", find_edges(input_image, 30, 255).first);
+	write_image("edges2.png", non_maximum_suppress(find_edges(input_image, 30, 255).first, 0.7*255, 2, 2));
 		
 	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
 	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
