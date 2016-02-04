@@ -94,6 +94,66 @@ void write_image(const string &filename, const SDoublePlane &input)
 	SImageIO::write_png_file(filename.c_str(), output_planes[0], output_planes[1], output_planes[2]);
 }
 
+double image_max(const SDoublePlane &input)
+{
+	double max=0;
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			if (input[i][j] > max)
+			{
+				max = input[i][j];
+			}
+		}
+	}
+	return max;
+}
+
+double image_min(const SDoublePlane &input)
+{
+	double min=0;
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			if (input[i][j] < min)
+			{
+				min = input[i][j];
+			}
+		}
+	}
+	return min;
+}
+
+SDoublePlane normalize_image(const SDoublePlane &input)
+{
+	SDoublePlane output(input);
+	double max = image_max(output);
+	double min = image_min(output);
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			output[i][j] = (output[i][j] - min) / (max - min) * 255;
+		}
+	}
+	return output;
+}
+
+SDoublePlane complement_image(const SDoublePlane &input)
+{
+	SDoublePlane output(input);
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			output[i][j] = 255 - output[i][j];
+		}
+	}
+	return output;
+}
+
 // Function that outputs a visualization of detected symbols
 void  write_detection_image(const string &filename, const vector<DetectedSymbol> &symbols, const SDoublePlane &input)
 {
@@ -815,13 +875,16 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 4 //////////
-	/*	
+	
 	SDoublePlane pl_note(input_image.rows(), input_image.cols());
 	SDoublePlane pl_quarterrest(input_image.rows(), input_image.cols());
 	SDoublePlane pl_eighthrest(input_image.rows(), input_image.cols());
-		
-	vector<DetectedSymbol> symbols;
-	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols);
+	
+	
+	vector<DetectedSymbol> symbols_hamming;
+	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
+	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
+	/*
 	// for(int i=0; i<10; i++)
 	// {
 		// DetectedSymbol s;
