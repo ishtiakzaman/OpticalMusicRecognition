@@ -440,7 +440,7 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const S
 
 	return symbols;
 }
-
+//find max votes from accumulator
 double find_max_vote(const SDoublePlane &acc)
 {
 	double max=0;
@@ -449,6 +449,7 @@ double find_max_vote(const SDoublePlane &acc)
 	}
 	return max;
 }
+//find min votes from accumulator
 double find_min_vote(const SDoublePlane &acc)
 {
 	double min=acc[0][0];
@@ -457,6 +458,7 @@ double find_min_vote(const SDoublePlane &acc)
 	}
 	return min;
 }
+//Do Min Max Normalization on the votes of accumulator
 SDoublePlane normalize_votes(const SDoublePlane &acc)
 {
 	SDoublePlane normalized(acc.rows(),acc.cols());
@@ -467,6 +469,7 @@ SDoublePlane normalize_votes(const SDoublePlane &acc)
 	}
 	return normalized;
 }
+//for every first line of the staff set the other 4 lines of staff using the best spacing found
 SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercept_value,int staff_number)
 {
         set<int> row_nums;
@@ -492,7 +495,8 @@ SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercep
 
         return row_votes;
 }
-SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,int neighbour_threshold=4,int start=0)
+//using the normalized votes find the best row co-ordinates for staff lines
+SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=8,int start=0)
 {	SDoublePlane row_spacing=row_votes;
 	if(start < row_votes.rows()){
         SDoublePlane staff_lines(row_votes.rows(),1);
@@ -500,33 +504,33 @@ SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoub
 	double best_value=0;
         int intercept_value=0;
         while(i<row_votes.rows()){
-                if(row_votes[i][best_space] > 0){
+                if(normed_votes[i][0] > norm_threshold){
                         best_value=normed_votes[i][0];
                         intercept_value=i;
-			for(int j=1;j<4;j++){
-                                if(normed_votes[i+j][0] > best_value){
+			for(int j=1;j<neighbour_threshold;j++){
+                                if(normed_votes[i+j][0] > best_value ){
                                         best_value=normed_votes[i+j][0];
                                         intercept_value=i+j;
                                 }
                         }
 		row_spacing=set_staff(row_spacing,best_space,intercept_value,start);
-                i=intercept_value+(4*(best_space))+4;
-		start=intercept_value+(4*best_space)+4;
+                i=intercept_value+(4*(best_space))+neighbour_threshold;
+		start=intercept_value+(4*best_space)+neighbour_threshold;
 
                 }
-		//row_spacing=set_staff(row_spacing,best_space,intercept_value,start);
-                //break;
+		
      		i++;
         }
-	//row_spacing=find_best_line_intercepts(row_spacing,normed_votes,best_space,neighbour_threshold,intercept_value+1+(4*best_space));
+	
         }
 	return row_spacing;
 }
+//from the row co-ordinates/best space matrix find the space parameter with high votes
 int find_best_spacing(const SDoublePlane &row_spacing)
 {
 	long max=0,sum=0;
 	int best_space=0;
-	for(int i=0;i<row_spacing.cols();i++){
+	for(int i=2;i<row_spacing.cols();i++){
 		sum=0;
 		for(int j=0;j<row_spacing.rows();j++){
 			sum=sum+row_spacing[j][i];
@@ -538,15 +542,78 @@ int find_best_spacing(const SDoublePlane &row_spacing)
 	}
 	return best_space;
 }
-pair<SDoublePlane,int> hough_transform(const SDoublePlane &edges,double threshold=0)
+bool is_max_in_neighbour_for_hough(const SDoublePlane &input, int y, int x, int w, int h)
 {
-        SDoublePlane accumulator(edges.rows(),1);
+
+        int hw = w / 2;
+        int hh = h / 2;
+        
+	for (int i = -hh; i <= hh; i++)
+        {       int k = y + i;
+
+                for (int j = -hw; j <= hw; j++)
+                {
+
+                        int l = x + j;
+                        if (k < 0 || k >= input.rows())
+                        {
+                                continue;
+                        }
+                        if (l < 0 || l >= input.cols())
+                        {
+                                continue;
+                        }
+                        if (k == y && l == x)
+                        {
+                                continue;
+                        }
+
+                        if (input[k][l] < input[y][x] )
+                        {
+                                 return false;
+                        }
+
+                }
+        }
+
+        return true;
+}
+
+
+SDoublePlane non_maximum_suppress_for_hough(const SDoublePlane &input, int w, int h)
+{
+        double threshold = 170;
+        SDoublePlane output(input.rows(), input.cols());
+
+        for (int i = 0; i < input.rows(); i++)
+        {
+                for (int j = 0; j < input.cols(); j++)
+                {
+                        if (input[i][j] < threshold &&
+                                        is_max_in_neighbour_for_hough(input, i, j, w, h))
+                        {
+                                output[i][j] = 255;
+                        }
+                        else
+                        {
+                                output[i][j] = 0;
+                        }
+                }
+        }
+        return output;
+}
+//return a pair of 1-d SDoublePlane with 255 set for staff lines and integer representing distance between the staff lines 
+pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,double threshold=0.001,int neighborhood=8,double norm_threshold=0.55)
+{
+        SDoublePlane edges=non_maximum_suppress_for_hough(input,0,2);
+	SDoublePlane accumulator(edges.rows(),1);
 		
 	SDoublePlane row_spacing(edges.rows(),edges.rows());
 	
 	 for(int i=0;i<edges.rows();i++){
                 for(int j=0;j<edges.cols();j++){
-                        if(edges[i][j] > threshold){
+			
+                        if(edges[i][j] > threshold ){
 
                         	accumulator[i][0]=accumulator[i][0] + 1;
                                 
@@ -554,24 +621,22 @@ pair<SDoublePlane,int> hough_transform(const SDoublePlane &edges,double threshol
                 }
         }
 	
+	
 	SDoublePlane normed_votes=normalize_votes(accumulator);
-
+	int cur=0,count=0;
         for(int i=0;i<edges.rows();i++){
                 for(int j=0;j<edges.cols();j++){
-                        if(edges[i][j] > threshold){
-	
-      				for(int z=i-1;z>=0;z--){
-					if(normed_votes[z][0]>=0.9 && (i-z)>2)row_spacing[z][i-z]++;
+                        if(edges[i][j] > threshold && normed_votes[i][0] > norm_threshold){
+				count=0;
+      				for(int z=i-1;z>0;z--){
+					if(normed_votes[z][0]>=norm_threshold &&  abs(i-z) > neighborhood && z!=i && count<1){cur=i;count++;row_spacing[z][abs(i-z)]++;}
 				}
                         }
                 }
         }
-	//for(int i=0;i<row_spacing.rows();i++){
-	//cout<<row_spacing[i][12]<<endl;
-	//}
-	//print_image_value1(row_spacing);
+	
 	int best_space=find_best_spacing(row_spacing);
-	//cout<<best_space;
+	cout<<best_space;
 	SDoublePlane best_row_intercepts= find_best_line_intercepts(row_spacing,normed_votes,best_space);
 	for(int i=0;i<best_row_intercepts.rows();i++){
 	accumulator[i][0]=best_row_intercepts[i][best_space];
@@ -579,6 +644,7 @@ pair<SDoublePlane,int> hough_transform(const SDoublePlane &edges,double threshol
 	return make_pair(accumulator,best_space);
 }
 
+//draw lines on the image after hough transform
 SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input)
 {
 	SDoublePlane lines(input.rows(),input.cols());
@@ -795,12 +861,8 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-	
-	//test
-	//SDoublePlane acc=hough_transform(find_edges(input_image));
-	//SDoublePlane lines=get_lines(acc,input_image);
-	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
-	pair<SDoublePlane,int> intercept_space=hough_transform(find_edges(input_image));
+	//testbegin
+	pair<SDoublePlane,int> intercept_space=hough_transform(input_image);
 	SDoublePlane lines=get_lines(intercept_space.first,input_image);
 	SImageIO::write_png_file("lines1.png",input_image,lines,lines);
 	//
@@ -841,9 +903,13 @@ int main(int argc, char *argv[])
 
 	////////// Step 5 //////////
 	
-	write_image("edges.png", non_maximum_suppress(find_edges(input_image),2,2));
+	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
+	write_image("edges.png", edge_thinning_non_maximum_suppress(find_edges(convolve_general(input_image, gaussian)), 11, 7, 255));	
 		
-	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
-	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
+	vector<SDoublePlane> template_image;
+	template_image.push_back(SImageIO::read_png_file("template1.png"));	
+	template_image.push_back(SImageIO::read_png_file("template2.png"));	
+	template_image.push_back(SImageIO::read_png_file("template3.png"));	
+	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, 25);		
 	write_detection_image("detected.png", symbols, input_image);	
 }
