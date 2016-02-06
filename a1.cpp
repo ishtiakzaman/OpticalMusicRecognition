@@ -962,9 +962,6 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 	return;
 }
 
-//int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
-//		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest,
-//		vector<DetectedSymbol> &symbols)
 int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 		double threshold, SDoublePlane &output, Type t,
 		vector<DetectedSymbol> &symbols)
@@ -988,6 +985,65 @@ int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 
 	
 	return 0;
+}
+
+int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, int interval)
+{
+	vector<int> line_pos;
+	for (int i = 0; i < lines.rows(); i++)
+	{
+		if (lines[i][0] == 255)
+		{
+			line_pos.push_back(i);
+		}
+	}
+	
+	int last = 0;
+	vector<int> groups;
+	for(vector<int>::iterator iter = line_pos.begin(); iter < line_pos.end(); iter++)
+	{
+		int y = *iter;
+		if (y - last > interval * 2)
+		{
+			groups.push_back(y);
+		}
+		last = y;
+	}
+	
+	int ginterval = groups[1] - groups[0];
+	int upper_bound = -4 * interval;
+	int lower_bound = ginterval - 4 * interval;
+	
+	for(vector<DetectedSymbol>::iterator symiter = symbols.begin(); symiter < symbols.end(); symiter++)
+	{
+		if (symiter->type != NOTEHEAD)
+		{
+			continue;
+		}
+		for(vector<int>::iterator giter = groups.begin(); giter < groups.end(); giter++)
+		{
+			int gy = *giter;
+			int dy = symiter->row - 0.1*interval - gy;
+			//if (dy < upper_bound)
+			//{
+			//	// missing some group
+			//	break;
+			//}
+			if(dy > lower_bound)
+			{
+				// belong to next group
+				continue;
+			}
+			int np = 4 - dy * 2 / interval + 28;
+			if ((giter - groups.begin()) % 2 != 0)
+			{
+				np += 2;
+			}
+			np %= 7;
+			symiter->pitch = 'A' + np;
+			break;
+		}
+	}
 }
 
 
@@ -1032,18 +1088,19 @@ int main(int argc, char *argv[])
 	
 	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
 	
-	if (scale_ratio <= 1.0)
+	if (scale_ratio < 2.0)
 	{
 		tmpl_note = scale_image(tmpl_note, scale_ratio);
 		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
 		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
 	}
-	else if(scale_ratio <= 5.0)
+	else if(scale_ratio >= 1.5 && scale_ratio <= 5.0)
 	{
 		scale_ratio = 1/scale_ratio;
 		input_image = scale_image(input_image, scale_ratio);
 	}
 	
+	write_image("rs_music.png", input_image);
 	write_image("rs_tmpl_1.png", tmpl_note);
 	write_image("rs_tmpl_2.png", tmpl_quarterrest);
 	write_image("rs_tmpl_3.png", tmpl_eighthrest);
@@ -1059,7 +1116,9 @@ int main(int argc, char *argv[])
 	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_note, 0.78, pl_note, NOTEHEAD, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_eighthrest, 0.75, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.78, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	
+	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second - 1);
 	
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	/*
