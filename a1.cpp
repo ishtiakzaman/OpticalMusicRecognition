@@ -982,7 +982,7 @@ int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
 	// non-maximum suppress
-	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols(), tmpl.rows()-4);
+	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols()*0.5, tmpl.rows());
 	//write_image("sup_hamming_dist_note.png", sup_note);
 	get_symbols(sup_note, symbols, t, tmpl.cols(), tmpl.rows());
 
@@ -1010,9 +1010,9 @@ int main(int argc, char *argv[])
 	//SDoublePlane acc=hough_transform(find_edges(input_image).first);
 	//SDoublePlane lines=get_lines(acc,input_image);
 	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
-	/*pair<SDoublePlane,int> intercept_space = hough_transform(find_edges(input_image).first);
+	pair<SDoublePlane,int> intercept_space = hough_transform(find_edges(input_image).first);
 	SDoublePlane lines = get_lines(intercept_space.first, input_image);
-	SImageIO::write_png_file("lines1.png", input_image, lines, lines);*/
+	SImageIO::write_png_file("lines1.png", input_image, lines, lines);
 	//
 	//testend
 	/////////// Step 2 //////////
@@ -1032,9 +1032,17 @@ int main(int argc, char *argv[])
 	
 	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
 	
-	tmpl_note = scale_image(tmpl_note, scale_ratio);
-	tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
-	tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
+	if (scale_ratio <= 1.0)
+	{
+		tmpl_note = scale_image(tmpl_note, scale_ratio);
+		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
+		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
+	}
+	else if(scale_ratio <= 5.0)
+	{
+		scale_ratio = 1/scale_ratio;
+		input_image = scale_image(input_image, scale_ratio);
+	}
 	
 	write_image("rs_tmpl_1.png", tmpl_note);
 	write_image("rs_tmpl_2.png", tmpl_quarterrest);
@@ -1049,7 +1057,7 @@ int main(int argc, char *argv[])
 	
 	vector<DetectedSymbol> symbols_hamming;
 	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_note, 0.80, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.79, pl_note, NOTEHEAD, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_eighthrest, 0.75, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
