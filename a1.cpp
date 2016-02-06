@@ -13,6 +13,8 @@
 
 using namespace std;
 
+#define PI 3.14159
+
 // The simple image class is called SDoublePlane, with each pixel represented as
 // a double (floating point) type. This means that an SDoublePlane can represent
 // values outside the range 0-255, and thus can represent squared gradient magnitudes,
@@ -92,6 +94,123 @@ void write_image(const string &filename, const SDoublePlane &input)
 		output_planes[i] = input;
 	}	
 	SImageIO::write_png_file(filename.c_str(), output_planes[0], output_planes[1], output_planes[2]);
+}
+
+double image_max(const SDoublePlane &input)
+{
+	double max=0;
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			if (input[i][j] > max)
+			{
+				max = input[i][j];
+			}
+		}
+	}
+	return max;
+}
+
+double image_min(const SDoublePlane &input)
+{
+	double min=0;
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			if (input[i][j] < min)
+			{
+				min = input[i][j];
+			}
+		}
+	}
+	return min;
+}
+
+SDoublePlane normalize_image(const SDoublePlane &input)
+{
+	SDoublePlane output(input);
+	double max = image_max(output);
+	double min = image_min(output);
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			output[i][j] = (output[i][j] - min) / (max - min) * 255;
+		}
+	}
+	return output;
+}
+
+SDoublePlane complement_image(const SDoublePlane &input)
+{
+	SDoublePlane output(input);
+	for (int i = 0; i < input.rows(); ++i)
+	{
+		for (int j = 0; j < input.cols(); ++j)
+		{
+			output[i][j] = 255 - output[i][j];
+		}
+	}
+	return output;
+}
+
+SDoublePlane scale_image(const SDoublePlane &input, double ratio)
+{
+	int m = input.rows();
+	int n = input.cols();
+	int m2 = input.rows()*ratio;
+	int n2 = input.cols()*ratio;
+	
+	SDoublePlane output(m2, n2);
+	
+	if (ratio > 0.5)
+	{
+		for (int i = 0; i < m2; i++)
+		{
+			int sk = i/ratio;
+			int ek = (i + 1)/ratio - 0.00001;
+			for (int j = 0; j < n2; j++)
+			{
+				int sl = j/ratio;
+				int el = (j + 1)/ratio - 0.00001;
+				
+				output[i][j] = input[sk][sl];
+				output[i][j] += input[sk][el];
+				output[i][j] += input[ek][sl];
+				output[i][j] += input[ek][el];
+				output[i][j] /= 4.0;
+			}
+		}
+	}
+	else
+	{
+		int span = 1.0/ratio + 0.5;
+		for (int i = 0; i < m2; i++)
+		{
+			int sk = i/ratio;
+			int ek = (i - 1)/ratio - 0.00001;
+			for (int j = 0; j < n2; j++)
+			{
+				int sl = j/ratio;
+				int el = (j - 1)/ratio - 0.00001;
+				
+				output[i][j] = 0;
+				for (int u = sk; u <= ek; u++)
+				{
+					for (int v = sl; v <= el; v++)
+					{
+						output[i][j] += input[u][v];
+					}
+				}
+				output[i][j] /= (ek - sk + 1)*(el - sl + 1);
+			}
+		}
+	}
+	
+	
+	return output;
 }
 
 // Function that outputs a visualization of detected symbols
@@ -304,9 +423,12 @@ SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
 
 // Apply an edge detector to an image, returns the binary edge map
 // Pass thresh=0 to ignore binary map, else pass thresh [1-255]
-SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
+// white_value only applies when thresh!=0, pass 1 for 0-1 image, or 255 for 0-255 binary image
+// Returns edge_map and gradient_angle
+pair<SDoublePlane, SDoublePlane> find_edges(const SDoublePlane &input, double thresh=0, double white_value=1)
 {	
 	SDoublePlane G(input.rows(), input.cols());
+	SDoublePlane Rotation(input.rows(), input.cols());
 	SDoublePlane Gx, Gy;
 
 	Gx = sobel_gradient_filter(input, true);
@@ -318,17 +440,121 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 		{
 			G[i][j] = sqrt(Gx[i][j]*Gx[i][j]+Gy[i][j]*Gy[i][j]);						
 			if (G[i][j] > 255) G[i][j] = 255;			
-		}
+			if ( abs(Gx[i][j]) < 0.0001)
+				Rotation[i][j] = PI / 2.0;
+			else
+				Rotation[i][j] = atan(Gy[i][j] / Gx[i][j]);			
+		}		
 	}
 
 	if (abs(thresh) > 0.0001)
 	{
 		for (int i = 0; i < G.rows(); ++i)		
 			for (int j = 0; j < G.cols(); ++j)
-				G[i][j] = (G[i][j]>thresh?1:0);
+				G[i][j] = (G[i][j]>thresh?white_value:0);
+	}
+	return make_pair(G, Rotation);
+}
+
+SDoublePlane create_gaussian_filter(int size, double sigma)
+{
+	SDoublePlane filter(size, size);
+	if (size % 2 == 0)
+	{
+		printf("Gaussian filter size must be odd.\n");
+		return filter;
+	}
+	
+	for(int i = -size/2; i <= size/2; i++)
+	{
+		for(int j = -size/2; j <= size/2; j++)			
+		{
+			filter[i+size/2][j+size/2] = 1.0/(2.0*PI*sigma*sigma)*exp(-1.0*(i*i+j*j)/(2*sigma*sigma));
+		}	
+	}
+	return filter;
+}
+
+SDoublePlane edge_thinning_non_maximum_suppress(const pair<SDoublePlane, SDoublePlane> &edge, const double threshold,
+														const double range, double white_value=1, bool double_pass=true)
+{
+	SDoublePlane gradient_value = edge.first;
+	SDoublePlane gradient_angle = edge.second;
+
+	SDoublePlane edge_map(gradient_value.rows(), gradient_value.cols());
+
+	for (int i = 0; i < gradient_value.rows(); ++i)
+	{
+		for (int j = 0; j < gradient_value.cols(); ++j)
+		{
+			
+			if (gradient_value[i][j] < threshold)
+			{
+				edge_map[i][j] = 0;
+				continue;
+			}
+
+			bool is_local_maxima = true;						
+			for (double d = -range/2.0; d <= range/2.0; ++d)
+			{
+				if ( abs(d) < 0.0001)
+					continue;
+				
+				int r = round( i - d * sin(gradient_angle[i][j]) );
+				int c = round( j + d * cos(gradient_angle[i][j]) );
+
+				if (r < 0 || c < 0 || r >= gradient_value.rows() || c >= gradient_value.cols())
+					break;				
+
+				if (gradient_value[r][c] > gradient_value[i][j] + 0.0001)
+				{
+					is_local_maxima = false;
+					break;
+				}			
+			}
+			
+
+			edge_map[i][j] = is_local_maxima?white_value:0;
+
+		}
 	}
 
-	return G;
+	if (double_pass == true)
+	{
+		for (int i = 0; i < edge_map.rows(); ++i)
+		{
+			for (int j = 0; j < edge_map.cols(); ++j)
+			{
+				if (abs(edge_map[i][j]) < 0.001)
+				{				
+					continue;
+				}
+				double avgr = 0.0, avgc = 0.0, cnt = 0;
+				for (double d = -range/2.0; d <= range/2.0; ++d)
+				{
+					
+					int r = round( i - d * sin(gradient_angle[i][j]) );
+					int c = round( j + d * cos(gradient_angle[i][j]) );
+
+					if (r < 0 || c < 0 || r >= edge_map.rows() || c >= edge_map.cols())
+						continue;				
+
+					if ( edge_map[r][c] > 0.0001)
+					{
+						edge_map[r][c] = 0;
+						avgr += r;
+						avgc += c;
+						cnt++;				
+					}			
+				}
+
+				edge_map[int(avgr/cnt)][int(avgc/cnt)] = white_value;
+
+			}
+		}
+	}
+
+	return edge_map;	
 }
 
 struct compare_priority_queue
@@ -389,12 +615,12 @@ SDoublePlane compute_distance_matrix(SDoublePlane &edge_map)
 }
 
 // Match template using edge detection method
-vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const SDoublePlane &template_image,
+vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const vector<SDoublePlane> &template_image,
 												double edge_threshold, double score_threshold)
 {
 	// Compute binary edge map with threshold value
-	SDoublePlane edge_map = find_edges(input, edge_threshold);
-	SDoublePlane edge_map_template = find_edges(template_image, edge_threshold);
+	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
+	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(convolve_general(input, gaussian)), edge_threshold, 7, 1);	
 
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
 	SDoublePlane D = compute_distance_matrix(edge_map);
@@ -403,37 +629,37 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const S
 
 	vector<DetectedSymbol> symbols;
 
-	for (int i = 0; i < input.rows(); ++i)	
-		for (int j = input.cols()-template_image.cols()+1; j < input.cols(); ++j)
-			score[i][j] = -1;
-
-	for (int i = input.rows()-template_image.rows()+1; i < input.rows(); ++i)	
-		for (int j = 0; j < input.cols(); ++j)
-			score[i][j] = -1;
-
-	for (int i = 0; i < input.rows()-template_image.rows()+1; ++i)
+	for (int template_type = 0; template_type < template_image.size(); ++template_type)
 	{
-		for (int j = 0; j < input.cols()-template_image.cols()+1; ++j)
-		{			
-			for (int k = 0; k < template_image.rows(); ++k)
-			{
-				for (int l = 0; l < template_image.cols(); ++l)	
-				{
-					score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
-				}
-			}
+		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(convolve_general(template_image[template_type], gaussian)), edge_threshold, 7, 1);		
+		for (int i = 0; i < score.rows(); ++i)
+			for (int j = 0; j < score.cols(); ++j)
+				score[i][j] = 0;
 
-			if (score[i][j] < score_threshold)
-			{
-				DetectedSymbol s;
-				s.row = i;
-				s.col = j;
-				s.width = 17;
-				s.height = 11;
-				s.type = (Type) (0);
-				s.confidence = rand();
-				s.pitch = (rand() % 7) + 'A';
-				symbols.push_back(s);
+		for (int i = 0; i < input.rows()-template_image[template_type].rows()+1; ++i)
+		{
+			for (int j = 0; j < input.cols()-template_image[template_type].cols()+1; ++j)
+			{			
+				for (int k = 0; k < template_image[template_type].rows(); ++k)
+				{
+					for (int l = 0; l < template_image[template_type].cols(); ++l)	
+					{
+						score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
+					}
+				}
+
+				if (score[i][j] < score_threshold)
+				{
+					DetectedSymbol s;
+					s.row = i;
+					s.col = j;
+					s.width = 17;
+					s.height = 11;
+					s.type = (Type) (template_type);
+					s.confidence = rand();
+					s.pitch = (rand() % 7) + 'A';
+					symbols.push_back(s);
+				}
 			}
 		}
 	}
@@ -449,7 +675,9 @@ double find_max_vote(const SDoublePlane &acc)
 	}
 	return max;
 }
+
 //find min votes from accumulator
+
 double find_min_vote(const SDoublePlane &acc)
 {
 	double min=acc[0][0];
@@ -459,6 +687,7 @@ double find_min_vote(const SDoublePlane &acc)
 	return min;
 }
 //Do Min Max Normalization on the votes of accumulator
+
 SDoublePlane normalize_votes(const SDoublePlane &acc)
 {
 	SDoublePlane normalized(acc.rows(),acc.cols());
@@ -469,7 +698,9 @@ SDoublePlane normalize_votes(const SDoublePlane &acc)
 	}
 	return normalized;
 }
+
 //for every first line of the staff set the other 4 lines of staff using the best spacing found
+
 SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercept_value,int staff_number)
 {
         set<int> row_nums;
@@ -481,23 +712,23 @@ SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercep
         }
 
         for(int j=staff_number;j<=last_row;j++){
-		if(j <row_votes.rows()){
-                	if(row_nums.count(j) == 1){
-                        	row_votes[j][best_space]=255;
-                	}
-                	else{
-                        	row_votes[j][best_space]=0;
-                	}		
-        		}		
-	}
-
-
+			if(j <row_votes.rows()){
+            	if(row_nums.count(j) == 1){
+                    	row_votes[j][best_space]=255;
+            	}
+            	else{
+                    	row_votes[j][best_space]=0;
+            	}		
+    		}		
+		}
 
         return row_votes;
 }
+
 //using the normalized votes find the best row co-ordinates for staff lines
 SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=8,int start=0)
-{	SDoublePlane row_spacing=row_votes;
+{	
+	SDoublePlane row_spacing=row_votes;
 	if(start < row_votes.rows()){
         SDoublePlane staff_lines(row_votes.rows(),1);
 	int i=0;	
@@ -525,6 +756,7 @@ SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoub
         }
 	return row_spacing;
 }
+
 //from the row co-ordinates/best space matrix find the space parameter with high votes
 int find_best_spacing(const SDoublePlane &row_spacing)
 {
@@ -542,6 +774,7 @@ int find_best_spacing(const SDoublePlane &row_spacing)
 	}
 	return best_space;
 }
+
 bool is_max_in_neighbour_for_hough(const SDoublePlane &input, int y, int x, int w, int h)
 {
 
@@ -603,11 +836,19 @@ SDoublePlane non_maximum_suppress_for_hough(const SDoublePlane &input, int w, in
         return output;
 }
 //return a pair of 1-d SDoublePlane with 255 set for staff lines and integer representing distance between the staff lines 
-pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,double threshold=0.001,int neighborhood=8,double norm_threshold=0.55)
-{
-        SDoublePlane edges=non_maximum_suppress_for_hough(input,0,2);
+//max_suppress = 1 to do a line thinning before hough, 0 otherwise
+pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppress,double threshold=0.001,int neighborhood=8,double norm_threshold=0.55)
+{	
+	SDoublePlane edges(input.rows(),input.cols());		
+	if(max_suppress = 1){
+		 edges=non_maximum_suppress_for_hough(input,0,2);
+	}
+	else{
+		 edges=input;
+	}
+	
 	SDoublePlane accumulator(edges.rows(),1);
-		
+    	
 	SDoublePlane row_spacing(edges.rows(),edges.rows());
 	
 	 for(int i=0;i<edges.rows();i++){
@@ -636,7 +877,7 @@ pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,double threshol
         }
 	
 	int best_space=find_best_spacing(row_spacing);
-	cout<<best_space;
+	
 	SDoublePlane best_row_intercepts= find_best_line_intercepts(row_spacing,normed_votes,best_space);
 	for(int i=0;i<best_row_intercepts.rows();i++){
 	accumulator[i][0]=best_row_intercepts[i][best_space];
@@ -752,9 +993,9 @@ bool is_max_in_neighbour(const SDoublePlane &input, int y, int x, int w, int h)
 	return true;
 }
 
-SDoublePlane non_maximum_suppress(const SDoublePlane &input, int w, int h)
+SDoublePlane non_maximum_suppress(const SDoublePlane &input, double threshold, int w, int h)
 {
-	double threshold = 0.84 * 255;
+	//double threshold = 0.84 * 255;
 	SDoublePlane output(input.rows(), input.cols());
 	
 	for (int i = 0; i < input.rows(); i++)
@@ -779,7 +1020,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 {
 	for (int i = 0; i < input.rows(); i++)
 	{
-		for (int j = 0; j < input.cols(); j++)
+		for (int j = 40; j < input.cols(); j++)
 		{
 			if (input[i][j] == 255)
 			{
@@ -798,52 +1039,88 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 	return;
 }
 
-int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
-		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest, vector<DetectedSymbol> &symbols)
+int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
+		double threshold, SDoublePlane &output, Type t,
+		vector<DetectedSymbol> &symbols)
 {
 	// non-maximum suppress size
 	int sup_w,  sup_h;
 	
 	//shawn calc hamming distance
+	
 	// get template image
-	SDoublePlane template_note = SImageIO::read_png_file("template1.png");
+	//SDoublePlane template_note = SImageIO::read_png_file("template1.png");
 	// get distance
-	SDoublePlane hammdis_note = get_Hamming_distance(input, template_note);
-	write_image("hamming_dist_note.png", hammdis_note);
+	SDoublePlane hammdis_note = get_Hamming_distance(input, tmpl);
+	//write_image("hamming_dist_note.png", hammdis_note);
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
 	// non-maximum suppress
-	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, template_note.cols(), template_note.rows());
-	write_image("sup_hamming_dist_note.png", sup_note);
-	get_symbols(sup_note, symbols, NOTEHEAD, template_note.cols(), template_note.rows());
-	
-	// quarter_rest
-	SDoublePlane template_quarterrest = SImageIO::read_png_file("template2.png");
-	// get distance
-	SDoublePlane hammdis_quarterrest = get_Hamming_distance(input, template_quarterrest);
-	write_image("hamming_dist_quarterrest.png", hammdis_quarterrest);
-	// cout << plane_max(hammdis_quarterrest) / 255 << endl;
-	// non-maximum suppress
-	SDoublePlane sup_quarterrest = non_maximum_suppress(hammdis_quarterrest, template_quarterrest.cols(), template_quarterrest.rows());
-	write_image("sup_hamming_dist_quarterrest.png", sup_quarterrest);
-	get_symbols(sup_quarterrest, symbols, QUARTERREST, template_quarterrest.cols(), template_quarterrest.rows());
-	
-	// quarter_rest
-	SDoublePlane template_eighthrest = SImageIO::read_png_file("template3.png");
-	// get distance
-	SDoublePlane hammdis_eighthrest = get_Hamming_distance(input, template_eighthrest);
-	write_image("hamming_dist_eighthrest.png", hammdis_eighthrest);
-	// cout << plane_max(hammdis_eighthrest) / 255 << endl;
-	// non-maximum suppress
-	SDoublePlane sup_eighthrest = non_maximum_suppress(hammdis_eighthrest, template_eighthrest.cols(), template_eighthrest.rows());
-	write_image("sup_hamming_dist_eighthrest.png", sup_eighthrest);
-	get_symbols(sup_eighthrest, symbols, EIGHTHREST, template_eighthrest.cols(), template_eighthrest.rows());
+	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols()*0.5, tmpl.rows()-(int)(tmpl.rows()*0.4));
+	//write_image("sup_hamming_dist_note.png", sup_note);
+	get_symbols(sup_note, symbols, t, tmpl.cols(), tmpl.rows());
 
-	pl_note = sup_note;
-	pl_quarterrest = sup_quarterrest;
-	pl_eighthrest = sup_eighthrest;
 	
 	return 0;
+}
+
+int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, int interval)
+{
+	vector<int> line_pos;
+	for (int i = 0; i < lines.rows(); i++)
+	{
+		if (lines[i][0] == 255)
+		{
+			line_pos.push_back(i);
+		}
+	}
+	
+	int last = 0;
+	vector<int> groups;
+	for(vector<int>::iterator iter = line_pos.begin(); iter < line_pos.end(); iter++)
+	{
+		int y = *iter;
+		if (y - last > interval * 2)
+		{
+			groups.push_back(y);
+		}
+		last = y;
+	}
+	
+	int ginterval = groups[1] - groups[0];
+	int upper_bound = -4 * interval;
+	int lower_bound = ginterval - 4 * interval;
+	
+	for(vector<DetectedSymbol>::iterator symiter = symbols.begin(); symiter < symbols.end(); symiter++)
+	{
+		if (symiter->type != NOTEHEAD)
+		{
+			continue;
+		}
+		for(vector<int>::iterator giter = groups.begin(); giter < groups.end(); giter++)
+		{
+			int gy = *giter;
+			int dy = symiter->row - 0.1*interval - gy;
+			//if (dy < upper_bound)
+			//{
+			//	// missing some group
+			//	break;
+			//}
+			if(dy > lower_bound)
+			{
+				// belong to next group
+				continue;
+			}
+			int np = 4 - dy * 2 / interval + 28;
+			if ((giter - groups.begin()) % 2 != 0)
+			{
+				np += 2;
+			}
+			np %= 7;
+			symiter->pitch = 'A' + np;
+			break;
+		}
+	}
 }
 
 
@@ -861,10 +1138,15 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
-	//testbegin
-	pair<SDoublePlane,int> intercept_space=hough_transform(input_image);
-	SDoublePlane lines=get_lines(intercept_space.first,input_image);
-	SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+	
+	//test
+	//SDoublePlane acc=hough_transform(find_edges(input_image).first);
+	//SDoublePlane lines=get_lines(acc,input_image);
+	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+	pair<SDoublePlane,int> intercept_space = hough_transform(input_image,1);
+	SDoublePlane lines = get_lines(intercept_space.first, input_image);
+	SImageIO::write_png_file("lines1.png", input_image, lines, lines);
+
 	//
 	//testend
 	/////////// Step 2 //////////
@@ -875,15 +1157,49 @@ int main(int argc, char *argv[])
 			mean_filter[i][j] = 1/9.0;
 	SDoublePlane output_image = convolve_general(input_image, mean_filter);
 	*/
+	
+	
+	// scale temple
+	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
+	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
+	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
+	
+	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
+	
+	if (scale_ratio < 2.0)
+	{
+		tmpl_note = scale_image(tmpl_note, scale_ratio);
+		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
+		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
+	}
+	else if(scale_ratio >= 1.5 && scale_ratio <= 5.0)
+	{
+		scale_ratio = 1/scale_ratio;
+		input_image = scale_image(input_image, scale_ratio);
+	}
+	
+	write_image("rs_music.png", input_image);
+	write_image("rs_tmpl_1.png", tmpl_note);
+	write_image("rs_tmpl_2.png", tmpl_quarterrest);
+	write_image("rs_tmpl_3.png", tmpl_eighthrest);
 
 	////////// Step 4 //////////
-	/*	
+	
 	SDoublePlane pl_note(input_image.rows(), input_image.cols());
 	SDoublePlane pl_quarterrest(input_image.rows(), input_image.cols());
 	SDoublePlane pl_eighthrest(input_image.rows(), input_image.cols());
-		
-	vector<DetectedSymbol> symbols;
-	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols);
+	
+	
+	vector<DetectedSymbol> symbols_hamming;
+	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.78, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.78, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	
+	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second - 1);
+	
+	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
+	/*
 	// for(int i=0; i<10; i++)
 	// {
 		// DetectedSymbol s;
@@ -902,7 +1218,7 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 5 //////////
-	
+
 	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
 	write_image("edges.png", edge_thinning_non_maximum_suppress(find_edges(convolve_general(input_image, gaussian)), 11, 7, 255));	
 		
