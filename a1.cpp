@@ -326,8 +326,8 @@ pair<SDoublePlane, SDoublePlane> find_edges(const SDoublePlane &input, double th
 			if ( abs(Gx[i][j]) < 0.0001)
 				Rotation[i][j] = PI / 2.0;
 			else
-				Rotation[i][j] = atan(Gy[i][j] / Gx[i][j]);
-		}
+				Rotation[i][j] = atan(Gy[i][j] / Gx[i][j]);			
+		}		
 	}
 
 	if (abs(thresh) > 0.0001)
@@ -336,8 +336,108 @@ pair<SDoublePlane, SDoublePlane> find_edges(const SDoublePlane &input, double th
 			for (int j = 0; j < G.cols(); ++j)
 				G[i][j] = (G[i][j]>thresh?white_value:0);
 	}
-
 	return make_pair(G, Rotation);
+}
+
+SDoublePlane create_gaussian_filter(int size, double sigma)
+{
+	SDoublePlane filter(size, size);
+	if (size % 2 == 0)
+	{
+		printf("Gaussian filter size must be odd.\n");
+		return filter;
+	}
+	
+	for(int i = -size/2; i <= size/2; i++)
+	{
+		for(int j = -size/2; j <= size/2; j++)			
+		{
+			filter[i+size/2][j+size/2] = 1.0/(2.0*PI*sigma*sigma)*exp(-1.0*(i*i+j*j)/(2*sigma*sigma));
+		}	
+	}
+	return filter;
+}
+
+SDoublePlane edge_thinning_non_maximum_suppress(const pair<SDoublePlane, SDoublePlane> &edge, const double threshold,
+														const double range, double white_value=1, bool double_pass=true)
+{
+	SDoublePlane gradient_value = edge.first;
+	SDoublePlane gradient_angle = edge.second;
+
+	SDoublePlane edge_map(gradient_value.rows(), gradient_value.cols());
+
+	for (int i = 0; i < gradient_value.rows(); ++i)
+	{
+		for (int j = 0; j < gradient_value.cols(); ++j)
+		{
+			
+			if (gradient_value[i][j] < threshold)
+			{
+				edge_map[i][j] = 0;
+				continue;
+			}
+
+			bool is_local_maxima = true;						
+			for (double d = -range/2.0; d <= range/2.0; ++d)
+			{
+				if ( abs(d) < 0.0001)
+					continue;
+				
+				int r = round( i - d * sin(gradient_angle[i][j]) );
+				int c = round( j + d * cos(gradient_angle[i][j]) );
+
+				if (r < 0 || c < 0 || r >= gradient_value.rows() || c >= gradient_value.cols())
+					break;				
+
+				if (gradient_value[r][c] > gradient_value[i][j] + 0.0001)
+				{
+					is_local_maxima = false;
+					break;
+				}			
+			}
+			
+
+			edge_map[i][j] = is_local_maxima?white_value:0;
+
+		}
+	}
+
+	if (double_pass == true)
+	{
+		for (int i = 0; i < edge_map.rows(); ++i)
+		{
+			for (int j = 0; j < edge_map.cols(); ++j)
+			{
+				if (abs(edge_map[i][j]) < 0.001)
+				{				
+					continue;
+				}
+				double avgr = 0.0, avgc = 0.0, cnt = 0;
+				for (double d = -range/2.0; d <= range/2.0; ++d)
+				{
+					
+					int r = round( i - d * sin(gradient_angle[i][j]) );
+					int c = round( j + d * cos(gradient_angle[i][j]) );
+
+					if (r < 0 || c < 0 || r >= edge_map.rows() || c >= edge_map.cols())
+						continue;				
+
+					if ( edge_map[r][c] > 0.0001)
+					{
+						edge_map[r][c] = 0;
+						avgr += r;
+						avgc += c;
+						cnt++;				
+					}			
+				}
+
+				edge_map[int(avgr/cnt)][int(avgc/cnt)] = white_value;
+
+			}
+		}
+	}
+
+	return edge_map;	
 }
 
 struct compare_priority_queue
@@ -398,12 +498,12 @@ SDoublePlane compute_distance_matrix(SDoublePlane &edge_map)
 }
 
 // Match template using edge detection method
-vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const SDoublePlane &template_image,
+vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const vector<SDoublePlane> &template_image,
 												double edge_threshold, double score_threshold)
 {
 	// Compute binary edge map with threshold value
-	SDoublePlane edge_map = find_edges(input, edge_threshold).first;
-	SDoublePlane edge_map_template = find_edges(template_image, edge_threshold).first;
+	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
+	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(convolve_general(input, gaussian)), edge_threshold, 7, 1);	
 
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
 	SDoublePlane D = compute_distance_matrix(edge_map);
@@ -412,37 +512,37 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const S
 
 	vector<DetectedSymbol> symbols;
 
-	for (int i = 0; i < input.rows(); ++i)	
-		for (int j = input.cols()-template_image.cols()+1; j < input.cols(); ++j)
-			score[i][j] = -1;
-
-	for (int i = input.rows()-template_image.rows()+1; i < input.rows(); ++i)	
-		for (int j = 0; j < input.cols(); ++j)
-			score[i][j] = -1;
-
-	for (int i = 0; i < input.rows()-template_image.rows()+1; ++i)
+	for (int template_type = 0; template_type < template_image.size(); ++template_type)
 	{
-		for (int j = 0; j < input.cols()-template_image.cols()+1; ++j)
-		{			
-			for (int k = 0; k < template_image.rows(); ++k)
-			{
-				for (int l = 0; l < template_image.cols(); ++l)	
-				{
-					score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
-				}
-			}
+		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(convolve_general(template_image[template_type], gaussian)), edge_threshold, 7, 1);		
+		for (int i = 0; i < score.rows(); ++i)
+			for (int j = 0; j < score.cols(); ++j)
+				score[i][j] = 0;
 
-			if (score[i][j] < score_threshold)
-			{
-				DetectedSymbol s;
-				s.row = i;
-				s.col = j;
-				s.width = 17;
-				s.height = 11;
-				s.type = (Type) (0);
-				s.confidence = rand();
-				s.pitch = (rand() % 7) + 'A';
-				symbols.push_back(s);
+		for (int i = 0; i < input.rows()-template_image[template_type].rows()+1; ++i)
+		{
+			for (int j = 0; j < input.cols()-template_image[template_type].cols()+1; ++j)
+			{			
+				for (int k = 0; k < template_image[template_type].rows(); ++k)
+				{
+					for (int l = 0; l < template_image[template_type].cols(); ++l)	
+					{
+						score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
+					}
+				}
+
+				if (score[i][j] < score_threshold)
+				{
+					DetectedSymbol s;
+					s.row = i;
+					s.col = j;
+					s.width = 17;
+					s.height = 11;
+					s.type = (Type) (template_type);
+					s.confidence = rand();
+					s.pitch = (rand() % 7) + 'A';
+					symbols.push_back(s);
+				}
 			}
 		}
 	}
@@ -813,9 +913,9 @@ int main(int argc, char *argv[])
 	//SDoublePlane acc=hough_transform(find_edges(input_image).first);
 	//SDoublePlane lines=get_lines(acc,input_image);
 	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
-	pair<SDoublePlane,int> intercept_space = hough_transform(find_edges(input_image).first);
+	/*pair<SDoublePlane,int> intercept_space = hough_transform(find_edges(input_image).first);
 	SDoublePlane lines = get_lines(intercept_space.first, input_image);
-	SImageIO::write_png_file("lines1.png", input_image, lines, lines);
+	SImageIO::write_png_file("lines1.png", input_image, lines, lines);*/
 	//
 	//testend
 	/////////// Step 2 //////////
@@ -853,11 +953,14 @@ int main(int argc, char *argv[])
 	*/
 
 	////////// Step 5 //////////
-	
-	write_image("edges1.png", find_edges(input_image, 30, 255).first);
-	write_image("edges2.png", non_maximum_suppress(find_edges(input_image, 30, 255).first, 0.7*255, 2, 2));
+
+	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
+	write_image("edges.png", edge_thinning_non_maximum_suppress(find_edges(convolve_general(input_image, gaussian)), 11, 7, 255));	
 		
-	SDoublePlane template_image= SImageIO::read_png_file("template1.png");	
-	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 30, 6);	
+	vector<SDoublePlane> template_image;
+	template_image.push_back(SImageIO::read_png_file("template1.png"));	
+	template_image.push_back(SImageIO::read_png_file("template2.png"));	
+	template_image.push_back(SImageIO::read_png_file("template3.png"));	
+	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, 25);		
 	write_detection_image("detected.png", symbols, input_image);	
 }
