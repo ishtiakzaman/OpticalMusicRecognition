@@ -156,6 +156,63 @@ SDoublePlane complement_image(const SDoublePlane &input)
 	return output;
 }
 
+SDoublePlane scale_image(const SDoublePlane &input, double ratio)
+{
+	int m = input.rows();
+	int n = input.cols();
+	int m2 = input.rows()*ratio;
+	int n2 = input.cols()*ratio;
+	
+	SDoublePlane output(m2, n2);
+	
+	if (ratio > 0.5)
+	{
+		for (int i = 0; i < m2; i++)
+		{
+			int sk = i/ratio;
+			int ek = (i + 1)/ratio - 0.00001;
+			for (int j = 0; j < n2; j++)
+			{
+				int sl = j/ratio;
+				int el = (j + 1)/ratio - 0.00001;
+				
+				output[i][j] = input[sk][sl];
+				output[i][j] += input[sk][el];
+				output[i][j] += input[ek][sl];
+				output[i][j] += input[ek][el];
+				output[i][j] /= 4.0;
+			}
+		}
+	}
+	else
+	{
+		int span = 1.0/ratio + 0.5;
+		for (int i = 0; i < m2; i++)
+		{
+			int sk = i/ratio;
+			int ek = (i - 1)/ratio - 0.00001;
+			for (int j = 0; j < n2; j++)
+			{
+				int sl = j/ratio;
+				int el = (j - 1)/ratio - 0.00001;
+				
+				output[i][j] = 0;
+				for (int u = sk; u <= ek; u++)
+				{
+					for (int v = sl; v <= el; v++)
+					{
+						output[i][j] += input[u][v];
+					}
+				}
+				output[i][j] /= (ek - sk + 1)*(el - sl + 1);
+			}
+		}
+	}
+	
+	
+	return output;
+}
+
 // Function that outputs a visualization of detected symbols
 void  write_detection_image(const string &filename, const vector<DetectedSymbol> &symbols, const SDoublePlane &input)
 {
@@ -786,7 +843,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 {
 	for (int i = 0; i < input.rows(); i++)
 	{
-		for (int j = 0; j < input.cols(); j++)
+		for (int j = 40; j < input.cols(); j++)
 		{
 			if (input[i][j] == 255)
 			{
@@ -805,50 +862,30 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 	return;
 }
 
-int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
-		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest, vector<DetectedSymbol> &symbols)
+//int get_notes_possitions(const SDoublePlane &input, SDoublePlane &pl_note,
+//		SDoublePlane &pl_quarterrest, SDoublePlane &pl_eighthrest,
+//		vector<DetectedSymbol> &symbols)
+int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
+		double threshold, SDoublePlane &output, Type t,
+		vector<DetectedSymbol> &symbols)
 {
 	// non-maximum suppress size
 	int sup_w,  sup_h;
 	
 	//shawn calc hamming distance
+	
 	// get template image
-	SDoublePlane template_note = SImageIO::read_png_file("template1.png");
+	//SDoublePlane template_note = SImageIO::read_png_file("template1.png");
 	// get distance
-	SDoublePlane hammdis_note = get_Hamming_distance(input, template_note);
-	write_image("hamming_dist_note.png", hammdis_note);
+	SDoublePlane hammdis_note = get_Hamming_distance(input, tmpl);
+	//write_image("hamming_dist_note.png", hammdis_note);
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
 	// non-maximum suppress
-	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, 0.84*255, template_note.cols(), template_note.rows());
-	write_image("sup_hamming_dist_note.png", sup_note);
-	get_symbols(sup_note, symbols, NOTEHEAD, template_note.cols(), template_note.rows());
-	
-	// quarter_rest
-	SDoublePlane template_quarterrest = SImageIO::read_png_file("template2.png");
-	// get distance
-	SDoublePlane hammdis_quarterrest = get_Hamming_distance(input, template_quarterrest);
-	write_image("hamming_dist_quarterrest.png", hammdis_quarterrest);
-	// cout << plane_max(hammdis_quarterrest) / 255 << endl;
-	// non-maximum suppress
-	SDoublePlane sup_quarterrest = non_maximum_suppress(hammdis_quarterrest, 0.84*255, template_quarterrest.cols(), template_quarterrest.rows());
-	write_image("sup_hamming_dist_quarterrest.png", sup_quarterrest);
-	get_symbols(sup_quarterrest, symbols, QUARTERREST, template_quarterrest.cols(), template_quarterrest.rows());
-	
-	// quarter_rest
-	SDoublePlane template_eighthrest = SImageIO::read_png_file("template3.png");
-	// get distance
-	SDoublePlane hammdis_eighthrest = get_Hamming_distance(input, template_eighthrest);
-	write_image("hamming_dist_eighthrest.png", hammdis_eighthrest);
-	// cout << plane_max(hammdis_eighthrest) / 255 << endl;
-	// non-maximum suppress
-	SDoublePlane sup_eighthrest = non_maximum_suppress(hammdis_eighthrest, 0.84*255, template_eighthrest.cols(), template_eighthrest.rows());
-	write_image("sup_hamming_dist_eighthrest.png", sup_eighthrest);
-	get_symbols(sup_eighthrest, symbols, EIGHTHREST, template_eighthrest.cols(), template_eighthrest.rows());
+	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols(), tmpl.rows()-4);
+	//write_image("sup_hamming_dist_note.png", sup_note);
+	get_symbols(sup_note, symbols, t, tmpl.cols(), tmpl.rows());
 
-	pl_note = sup_note;
-	pl_quarterrest = sup_quarterrest;
-	pl_eighthrest = sup_eighthrest;
 	
 	return 0;
 }
@@ -886,6 +923,22 @@ int main(int argc, char *argv[])
 			mean_filter[i][j] = 1/9.0;
 	SDoublePlane output_image = convolve_general(input_image, mean_filter);
 	*/
+	
+	
+	// scale temple
+	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
+	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
+	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
+	
+	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
+	
+	tmpl_note = scale_image(tmpl_note, scale_ratio);
+	tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
+	tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
+	
+	write_image("rs_tmpl_1.png", tmpl_note);
+	write_image("rs_tmpl_2.png", tmpl_quarterrest);
+	write_image("rs_tmpl_3.png", tmpl_eighthrest);
 
 	////////// Step 4 //////////
 	
@@ -895,7 +948,11 @@ int main(int argc, char *argv[])
 	
 	
 	vector<DetectedSymbol> symbols_hamming;
-	get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
+	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.80, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.75, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	/*
 	// for(int i=0; i<10; i++)
