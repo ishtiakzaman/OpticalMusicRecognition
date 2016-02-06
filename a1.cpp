@@ -982,7 +982,7 @@ int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
 	// non-maximum suppress
-	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols()*0.5, tmpl.rows());
+	SDoublePlane sup_note = non_maximum_suppress(hammdis_note, threshold*255, tmpl.cols()*0.5, tmpl.rows()-(int)(tmpl.rows()*0.4));
 	//write_image("sup_hamming_dist_note.png", sup_note);
 	get_symbols(sup_note, symbols, t, tmpl.cols(), tmpl.rows());
 
@@ -1057,7 +1057,7 @@ int main(int argc, char *argv[])
 	
 	vector<DetectedSymbol> symbols_hamming;
 	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_note, 0.79, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.78, pl_note, NOTEHEAD, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_eighthrest, 0.75, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
