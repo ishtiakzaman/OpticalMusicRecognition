@@ -616,12 +616,11 @@ SDoublePlane compute_distance_matrix(SDoublePlane &edge_map)
 
 // Match template using edge detection method
 vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const vector<SDoublePlane> &template_image,
-												double edge_threshold, double score_threshold)
+												double edge_threshold, vector<double> &template_threshold)
 {
 	// Compute binary edge map with threshold value
 	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
-	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(convolve_general(input, gaussian)), edge_threshold, 7, 1);	
-
+	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(convolve_general(input, gaussian)), edge_threshold, 7, 1);		
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
 	SDoublePlane D = compute_distance_matrix(edge_map);
 
@@ -629,39 +628,42 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 
 	vector<DetectedSymbol> symbols;
 
-	for (int template_type = 0; template_type < template_image.size(); ++template_type)
+	for (int template_type = 0; template_type < template_image.size(); ++template_type)	
 	{
-		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(convolve_general(template_image[template_type], gaussian)), edge_threshold, 7, 1);		
-		for (int i = 0; i < score.rows(); ++i)
-			for (int j = 0; j < score.cols(); ++j)
-				score[i][j] = 0;
+		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(convolve_general(template_image[template_type], gaussian)), edge_threshold, 7, 1);
+		SDoublePlane D_template = compute_distance_matrix(edge_map_template);
 
 		for (int i = 0; i < input.rows()-template_image[template_type].rows()+1; ++i)
 		{
 			for (int j = 0; j < input.cols()-template_image[template_type].cols()+1; ++j)
 			{			
+				score[i][j] = 0;
+
 				for (int k = 0; k < template_image[template_type].rows(); ++k)
 				{
 					for (int l = 0; l < template_image[template_type].cols(); ++l)	
 					{
-						score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
+						if (edge_map_template[k][l] > 0.001)
+							score[i][j] += edge_map_template[k][l] * D[i+k][j+l];
+						else
+							score[i][j] += abs( D[i+k][j+l] - D_template[k][l]);
 					}
 				}
 
-				if (score[i][j] < score_threshold)
+				if (score[i][j] < template_threshold[template_type])				
 				{
 					DetectedSymbol s;
 					s.row = i;
 					s.col = j;
-					s.width = 17;
-					s.height = 11;
-					s.type = (Type) (template_type);
+					s.width = template_image[template_type].cols();
+					s.height = template_image[template_type].rows();
+					s.type = (Type) (template_type);					
 					s.confidence = rand();
 					s.pitch = (rand() % 7) + 'A';
 					symbols.push_back(s);
 				}
 			}
-		}
+		}	
 	}
 
 	return symbols;
@@ -1150,14 +1152,6 @@ int main(int argc, char *argv[])
 	//
 	//testend
 	/////////// Step 2 //////////
-	/*
-	SDoublePlane mean_filter(3,3);
-	for(int i=0; i<3; i++)
-		for(int j=0; j<3; j++)
-			mean_filter[i][j] = 1/9.0;
-	SDoublePlane output_image = convolve_general(input_image, mean_filter);
-	*/
-	
 	
 	// scale temple
 	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
@@ -1199,7 +1193,7 @@ int main(int argc, char *argv[])
 	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second - 1);
 	
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
-	/*
+	
 	// for(int i=0; i<10; i++)
 	// {
 		// DetectedSymbol s;
@@ -1215,7 +1209,7 @@ int main(int argc, char *argv[])
 
 	//write_detection_txt("detected.txt", symbols);
 	//write_detection_image("detected.png", symbols, input_image);	
-	*/
+	
 
 	////////// Step 5 //////////
 
@@ -1226,6 +1220,10 @@ int main(int argc, char *argv[])
 	template_image.push_back(SImageIO::read_png_file("template1.png"));	
 	template_image.push_back(SImageIO::read_png_file("template2.png"));	
 	template_image.push_back(SImageIO::read_png_file("template3.png"));	
-	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, 25);		
+	vector<double> template_threshold;
+	template_threshold.push_back(145);
+	template_threshold.push_back(450);
+	template_threshold.push_back(395);
+	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, template_threshold);
 	write_detection_image("detected.png", symbols, input_image);	
 }
