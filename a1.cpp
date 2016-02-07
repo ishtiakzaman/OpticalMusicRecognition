@@ -1190,7 +1190,7 @@ int main(int argc, char *argv[])
 	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_eighthrest, 0.78, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
-	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second - 1);
+	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
 	
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	
