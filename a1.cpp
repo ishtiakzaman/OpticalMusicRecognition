@@ -1213,7 +1213,7 @@ int main(int argc, char *argv[])
 	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
 	
 	write_detection_txt("detected_hamming.txt", symbols_hamming);
-	filter_symbols(symbols_hamming);
+	//filter_symbols(symbols_hamming);
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	
 	// for(int i=0; i<10; i++)
