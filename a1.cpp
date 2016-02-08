@@ -1007,7 +1007,14 @@ SDoublePlane non_maximum_suppress(const SDoublePlane &input, double threshold, i
 			if (input[i][j] > threshold &&
 					is_max_in_neighbour(input, i, j, w, h))
 			{
-				output[i][j] = 255;
+				if (input[i][j] > 0.85 * 255)
+				{
+					output[i][j] = 255;
+				}
+				else
+				{
+					output[i][j] = (input[i][j] - threshold)/(0.85 - threshold/255);
+				}
 			}
 			else
 			{
@@ -1024,7 +1031,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 	{
 		for (int j = 40; j < input.cols(); j++)
 		{
-			if (input[i][j] == 255)
+			if (input[i][j] != 0)
 			{
 				DetectedSymbol s;
 				s.row = i;
@@ -1032,7 +1039,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 				s.width = w;
 				s.height = h;
 				s.type = type;
-				s.confidence = 0;
+				s.confidence = input[i][j] / 255;
 				s.pitch = 'A';
 				symbols.push_back(s);
 			}
@@ -1125,6 +1132,19 @@ int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, 
 	}
 }
 
+void filter_symbols(vector<DetectedSymbol> &symbols)
+{
+	for(vector<DetectedSymbol>::iterator iter = symbols.begin();
+		iter != symbols.end(); iter++)
+	{
+		if (iter->confidence < 0.5)
+		{
+			iter = symbols.erase(iter);
+			iter--;
+		}
+	}
+}
+
 
 //
 // This main file just outputs a few test images. You'll want to change it to do 
@@ -1186,12 +1206,14 @@ int main(int argc, char *argv[])
 	
 	vector<DetectedSymbol> symbols_hamming;
 	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_note, 0.78, pl_note, NOTEHEAD, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_quarterrest, 0.76, pl_quarterrest, QUARTERREST, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_eighthrest, 0.78, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.70, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_quarterrest, 0.67, pl_quarterrest, QUARTERREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.67, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
 	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
 	
+	write_detection_txt("detected_hamming.txt", symbols_hamming);
+	filter_symbols(symbols_hamming);
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	
 	// for(int i=0; i<10; i++)
