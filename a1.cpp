@@ -888,17 +888,25 @@ pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppres
 }
 
 //draw lines on the image after hough transform
-SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input)
+SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input,int rgb)
 {
-	SDoublePlane lines(input.rows(),input.cols());
-
+	SDoublePlane lines = input;
+	if(rgb==1){
 	for(int i=0;i<acc.rows();i++){
 		if(acc[i][0] == 255){
 			for(int j=0;j<input.cols();j++){
 				lines[i][j]=255;
 			}
 		}
-	}
+	}}
+	else{
+		 for(int i=0;i<acc.rows();i++){
+                if(acc[i][0] == 255){
+                        for(int j=0;j<input.cols();j++){
+                                lines[i][j]=0;
+                        }
+                }
+        }}	
 	return lines;
 }
 
@@ -1170,8 +1178,8 @@ int main(int argc, char *argv[])
 	//SDoublePlane lines=get_lines(acc,input_image);
 	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
 	pair<SDoublePlane,int> intercept_space = hough_transform(input_image,1);
-	SDoublePlane lines = get_lines(intercept_space.first, input_image);
-	SImageIO::write_png_file("staves.png", input_image, lines, lines);
+	//SDoublePlane lines = get_lines(intercept_space.first, input_image);
+	SImageIO::write_png_file("staves.png", get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,1));
 
 	//
 	//testend
