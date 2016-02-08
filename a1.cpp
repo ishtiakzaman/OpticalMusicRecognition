@@ -1178,11 +1178,7 @@ int main(int argc, char *argv[])
 	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
 	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
 	
-<<<<<<< HEAD
 	double scale_ratio = (double)(intercept_space.second) / tmpl_note.rows();
-=======
-	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();	
->>>>>>> e9d7c947201c492c69a66d966ced8f651d8b4c2f
 	
 	if (scale_ratio < 2.0)
 	{
