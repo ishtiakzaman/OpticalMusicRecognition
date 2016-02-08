@@ -1061,6 +1061,10 @@ int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 	//SDoublePlane template_note = SImageIO::read_png_file("template1.png");
 	// get distance
 	SDoublePlane hammdis_note = get_Hamming_distance(input, tmpl);
+	if (t == NOTEHEAD)
+	{
+		write_image("scores4.png", hammdis_note);
+	}
 	//write_image("hamming_dist_note.png", hammdis_note);
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
