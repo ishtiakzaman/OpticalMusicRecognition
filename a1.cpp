@@ -728,7 +728,7 @@ SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercep
 }
 
 //using the normalized votes find the best row co-ordinates for staff lines
-SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=8,int start=0)
+SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=4,int start=0)
 {	
 	SDoublePlane row_spacing=row_votes;
 	if(start < row_votes.rows()){
@@ -839,10 +839,10 @@ SDoublePlane non_maximum_suppress_for_hough(const SDoublePlane &input, int w, in
 }
 //return a pair of 1-d SDoublePlane with 255 set for staff lines and integer representing distance between the staff lines 
 //max_suppress = 1 to do a line thinning before hough, 0 otherwise
-pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppress,double threshold=0.001,int neighborhood=8,double norm_threshold=0.55)
+pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppress,double threshold=0.001,int neighborhood=4,double norm_threshold=0.55)
 {	
 	SDoublePlane edges(input.rows(),input.cols());		
-	if(max_suppress = 1){
+	if(max_suppress == 1){
 		 edges=non_maximum_suppress_for_hough(input,0,2);
 	}
 	else{
