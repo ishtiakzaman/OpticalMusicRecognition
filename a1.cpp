@@ -1029,7 +1029,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 {
 	for (int i = 0; i < input.rows(); i++)
 	{
-		for (int j = 40; j < input.cols(); j++)
+		for (int j = 100; j < input.cols(); j++)
 		{
 			if (input[i][j] != 0)
 			{
@@ -1109,7 +1109,7 @@ int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, 
 		for(vector<int>::iterator giter = groups.begin(); giter < groups.end(); giter++)
 		{
 			int gy = *giter;
-			int dy = symiter->row - 0.1*interval - gy;
+			double dy = symiter->row - 0.2*interval - gy;
 			//if (dy < upper_bound)
 			//{
 			//	// missing some group
@@ -1120,7 +1120,7 @@ int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, 
 				// belong to next group
 				continue;
 			}
-			int np = 4 - dy * 2 / interval + 28;
+			int np = 4 - (int)(dy * 2 / interval) + 28;
 			if ((giter - groups.begin()) % 2 != 0)
 			{
 				np += 2;
@@ -1178,7 +1178,7 @@ int main(int argc, char *argv[])
 	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
 	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
 	
-	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
+	double scale_ratio = (double)(intercept_space.second) / tmpl_note.rows();
 	
 	if (scale_ratio < 2.0)
 	{
@@ -1186,7 +1186,7 @@ int main(int argc, char *argv[])
 		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
 		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
 	}
-	else if(scale_ratio >= 1.5 && scale_ratio <= 5.0)
+	else if(scale_ratio >= 2.0 && scale_ratio <= 5.0)
 	{
 		scale_ratio = 1/scale_ratio;
 		input_image = scale_image(input_image, scale_ratio);
@@ -1206,14 +1206,14 @@ int main(int argc, char *argv[])
 	
 	vector<DetectedSymbol> symbols_hamming;
 	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_note, 0.70, pl_note, NOTEHEAD, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_quarterrest, 0.67, pl_quarterrest, QUARTERREST, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_eighthrest, 0.67, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.75, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_quarterrest, 0.71, pl_quarterrest, QUARTERREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.71, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
 	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
 	
-	write_detection_txt("detected_hamming.txt", symbols_hamming);
 	//filter_symbols(symbols_hamming);
+	write_detection_txt("detected_hamming.txt", symbols_hamming);
 	write_detection_image("detected_hamming.png", symbols_hamming, input_image);
 	
 	// for(int i=0; i<10; i++)
