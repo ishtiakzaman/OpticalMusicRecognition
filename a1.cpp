@@ -529,18 +529,22 @@ SDoublePlane edge_thinning_non_maximum_suppress(const pair<SDoublePlane, SDouble
 				{				
 					continue;
 				}
-				double avgr = 0.0, avgc = 0.0, cnt = 0;
+				double avgr = i, avgc = j, cnt = 1;
+				edge_map[i][j] = 0;
 				for (double d = -range/2.0; d <= range/2.0; ++d)
 				{
 					
 					int r = round( i - d * sin(gradient_angle[i][j]) );
 					int c = round( j + d * cos(gradient_angle[i][j]) );
 
-					if (r < 0 || c < 0 || r >= edge_map.rows() || c >= edge_map.cols())
+					if (r < 0 || c < 0 || r >= edge_map.rows() || c >= edge_map.cols() || (r == i && j == c))
 						continue;				
 
-					if ( edge_map[r][c] > 0.0001)
+					if ( edge_map[r][c] > 0.0001 )
 					{
+						// If there gradient angle is different, skip
+						if ( abs(gradient_angle[i][j]-gradient_angle[r][c]) > 0.1) 
+							break;
 						edge_map[r][c] = 0;
 						avgr += r;
 						avgc += c;
@@ -619,8 +623,9 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 												double edge_threshold, vector<double> &template_threshold)
 {
 	// Compute binary edge map with threshold value
-	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
-	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(convolve_general(input, gaussian)), edge_threshold, 7, 1);		
+	SDoublePlane gaussian = create_gaussian_filter(5, 1);		
+	SDoublePlane edge_map = edge_thinning_non_maximum_suppress(find_edges(input), edge_threshold, 7, 1, true);	
+	write_image("edges.png", edge_thinning_non_maximum_suppress(find_edges(input), edge_threshold, 7, 255, true));
 	// Compute D: min distance to an edge pixel for all (i,j) in edge_map
 	SDoublePlane D = compute_distance_matrix(edge_map);
 
@@ -629,8 +634,9 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 	vector<DetectedSymbol> symbols;
 
 	for (int template_type = 0; template_type < template_image.size(); ++template_type)	
-	{
-		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(convolve_general(template_image[template_type], gaussian)), edge_threshold, 7, 1);
+	{		
+		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(template_image[template_type]), edge_threshold, 7, 1, true);
+		
 		SDoublePlane D_template = compute_distance_matrix(edge_map_template);
 
 		for (int i = 0; i < input.rows()-template_image[template_type].rows()+1; ++i)
@@ -650,8 +656,21 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 					}
 				}
 
-				if (score[i][j] < template_threshold[template_type])				
+				if (score[i][j] < template_threshold[template_type])
 				{
+					bool skip_match = false;
+					for (vector<DetectedSymbol>::iterator it = symbols.begin(); it != symbols.end(); ++it)
+					{
+						// Skip nearby matched to avoid double detection
+						if ( abs(it->row - i) < it->height && abs(it->col - j) < it->width)
+						{
+							skip_match = true;
+							break;
+						}
+					}
+					if (skip_match == true)
+						continue;
+
 					DetectedSymbol s;
 					s.row = i;
 					s.col = j;
@@ -661,6 +680,9 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 					s.confidence = rand();
 					s.pitch = (rand() % 7) + 'A';
 					symbols.push_back(s);
+
+					// Skip the next 5 column to avoid multiple selection					
+					j += 4;
 				}
 			}
 		}	
@@ -1159,6 +1181,8 @@ int main(int argc, char *argv[])
 	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
 	
 	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();
+
+	cout << "scale_ratio:" << scale_ratio << endl;
 	
 	if (scale_ratio < 2.0)
 	{
@@ -1210,20 +1234,34 @@ int main(int argc, char *argv[])
 	//write_detection_txt("detected.txt", symbols);
 	//write_detection_image("detected.png", symbols, input_image);	
 	
-
+	
 	////////// Step 5 //////////
+
+	/*
+	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
+	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
+	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
+	*/
 
 	SDoublePlane gaussian = create_gaussian_filter(5, 1);	
 	write_image("edges.png", edge_thinning_non_maximum_suppress(find_edges(convolve_general(input_image, gaussian)), 11, 7, 255));	
-		
-	vector<SDoublePlane> template_image;
-	template_image.push_back(SImageIO::read_png_file("template1.png"));	
-	template_image.push_back(SImageIO::read_png_file("template2.png"));	
-	template_image.push_back(SImageIO::read_png_file("template3.png"));	
+	
+	vector<SDoublePlane> template_image;	
+	template_image.push_back(tmpl_note);
+	template_image.push_back(tmpl_quarterrest);
+	template_image.push_back(tmpl_eighthrest);
 	vector<double> template_threshold;
-	template_threshold.push_back(145);
-	template_threshold.push_back(450);
-	template_threshold.push_back(395);
+	
+	template_threshold.push_back(160.0*scale_ratio*scale_ratio);
+	template_threshold.push_back(450.0*scale_ratio*scale_ratio);
+	template_threshold.push_back(395.0*scale_ratio*scale_ratio);
+	
+	/*
+	template_threshold.push_back(89.0*scale_ratio*scale_ratio);
+	template_threshold.push_back(250.0*scale_ratio*scale_ratio);
+	template_threshold.push_back(195.0*scale_ratio*scale_ratio);
+	*/
 	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, template_threshold);
+	get_notes_pitch(symbols, intercept_space.first, intercept_space.second - 1);
 	write_detection_image("detected.png", symbols, input_image);	
 }
