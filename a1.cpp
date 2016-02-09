@@ -614,7 +614,6 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 	for (int template_type = 0; template_type < template_image.size(); ++template_type)	
 	{		
 		SDoublePlane edge_map_template = edge_thinning_non_maximum_suppress(find_edges(template_image[template_type]), edge_threshold, template_image[0].cols()/2.86, 1, true);
-		
 		SDoublePlane D_template = compute_distance_matrix(edge_map_template);
 
 		for (int i = 0; i < input.rows()-template_image[template_type].rows()+1; ++i)
@@ -632,36 +631,36 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 						else
 							score[i][j] += abs( D[i+k][j+l] - D_template[k][l]);
 					}
-				}
+				}				
 
-				if (score[i][j] < template_threshold[template_type])
+				bool skip_match = false;
+				for (vector<DetectedSymbol>::iterator it = symbols.begin(); it != symbols.end(); ++it)
 				{
-					bool skip_match = false;
-					for (vector<DetectedSymbol>::iterator it = symbols.begin(); it != symbols.end(); ++it)
+					// Skip nearby matched to avoid double detection
+					if (it->confidence > 0.5 && it->type == template_type && abs(it->row - i) < it->height*0.4 
+									&& abs(it->col - j) < it->width*0.5)
 					{
-						// Skip nearby matched to avoid double detection
-						if ( abs(it->row - i) < it->height && abs(it->col - j) < it->width)
-						{
-							skip_match = true;
-							break;
-						}
+						skip_match = true;
+						break;
 					}
-					if (skip_match == true)
-						continue;
-
-					DetectedSymbol s;
-					s.row = i;
-					s.col = j;
-					s.width = template_image[template_type].cols();
-					s.height = template_image[template_type].rows();
-					s.type = (Type) (template_type);					
-					s.confidence = rand();
-					s.pitch = (rand() % 7) + 'A';
-					symbols.push_back(s);
-
-					// Skip the next 5 column to avoid multiple selection					
-					j += 4;
 				}
+				if (skip_match == true)
+					continue;				
+
+				DetectedSymbol s;
+				s.row = i;
+				s.col = j;
+				s.width = template_image[template_type].cols();
+				s.height = template_image[template_type].rows();
+				s.type = (Type) (template_type);	
+				s.confidence = 0.5+0.5*(template_threshold[template_type]-score[i][j])/template_threshold[template_type];					
+				s.pitch = 'A';
+				if (s.confidence > 0.4)
+					symbols.push_back(s);				
+				
+				// Skip a few next columns
+				if (s.confidence > 0.5)
+					j += s.width * 0.5;
 			}
 		}	
 	}
@@ -1157,6 +1156,47 @@ void filter_symbols(vector<DetectedSymbol> &symbols)
 	}
 }
 
+vector<DetectedSymbol> join_symbols(vector<DetectedSymbol> &symbols_hamming, vector<DetectedSymbol> &symbols_edge)
+{
+	vector<DetectedSymbol> symbols;
+	float weight = 0.8;
+	for (vector<DetectedSymbol>::iterator it1 = symbols_hamming.begin(); it1 != symbols_hamming.end(); ++it1)
+	{
+		for (vector<DetectedSymbol>::iterator it2 = symbols_edge.begin(); it2 != symbols_edge.end(); ++it2)	
+		{
+			
+			if ( it1->type == it2->type && abs(it1->row-it2->row) < it1->height*0.4 && abs(it1->col-it2->col) < it1->width*0.5
+										&& (it1->confidence*weight+it2->confidence*(1.0-weight)) > 0.5)
+			{
+
+				bool skip_match = false;
+				for (vector<DetectedSymbol>::iterator it = symbols.begin(); it != symbols.end(); ++it)
+				{
+					// Skip nearby matched to avoid double detection
+					if ( abs(it->row - (it1->row+it2->row)/2) < it->height*0.4 && abs(it->col - (it1->col+it2->col)/2) < it->width*0.5)
+					{
+						skip_match = true;
+						break;
+					}
+				}
+				if (skip_match == true)
+					continue;
+
+				DetectedSymbol s;
+				s.row = (it1->row+it2->row)/2;
+				s.col = (it1->col+it2->col)/2;
+				s.width = (it1->width+it2->width)/2;
+				s.height = (it1->height+it2->height)/2;
+				s.type = it1->type;
+				s.confidence = 2.0*(it1->confidence*weight+it2->confidence*(1.0-weight)) - 1.0;
+				s.pitch = 'A';
+				symbols.push_back(s);
+			}
+		}
+	}
+	return symbols;
+}
+
 
 //
 // This main file just outputs a few test images. You'll want to change it to do 
@@ -1173,19 +1213,12 @@ int main(int argc, char *argv[])
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
 	
-	//test
-	//SDoublePlane acc=hough_transform(find_edges(input_image).first);
-	//SDoublePlane lines=get_lines(acc,input_image);
-	//SImageIO::write_png_file("lines1.png",input_image,lines,lines);
+
 	pair<SDoublePlane,int> intercept_space = hough_transform(input_image,1);
-	//SDoublePlane lines = get_lines(intercept_space.first, input_image);
 	SImageIO::write_png_file("staves.png", get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,1));
 
-	//
-	//testend
-	/////////// Step 2 //////////
 	
-	// scale temple
+	// scale template
 	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
 	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
 	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
@@ -1212,16 +1245,9 @@ int main(int argc, char *argv[])
 	
 	
 	vector<DetectedSymbol> symbols_hamming;
-	//get_notes_possitions(input_image, pl_note, pl_quarterrest, pl_eighthrest, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_note, 0.75, pl_note, NOTEHEAD, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_quarterrest, 0.71, pl_quarterrest, QUARTERREST, symbols_hamming);
 	get_notes_possitions(input_image, tmpl_eighthrest, 0.71, pl_eighthrest, EIGHTHREST, symbols_hamming);
-	
-	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
-
-	filter_symbols(symbols_hamming);
-	//write_detection_txt("detected_hamming.txt", symbols_hamming);
-	write_detection_image("detected4.png", symbols_hamming, input_image);
 	
 	////////// Step 5 //////////
 	
@@ -1235,7 +1261,19 @@ int main(int argc, char *argv[])
 	template_threshold.push_back(450.0*scale_ratio*scale_ratio);
 	template_threshold.push_back(395.0*scale_ratio*scale_ratio);
 
-	vector<DetectedSymbol> symbols = match_template_by_edge(input_image, template_image, 11, template_threshold);
+	vector<DetectedSymbol> symbols_edge = match_template_by_edge(input_image, template_image, 11, template_threshold);
+	
+	vector<DetectedSymbol> symbols = join_symbols(symbols_hamming, symbols_edge);
+
+	filter_symbols(symbols_hamming);
+	get_notes_pitch(symbols_hamming, intercept_space.first, intercept_space.second);
+	write_detection_image("detected4.png", symbols_hamming, input_image);
+
+	filter_symbols(symbols_edge);
+	get_notes_pitch(symbols_edge, intercept_space.first, intercept_space.second - 1);
+	write_detection_image("detected5.png", symbols_edge, input_image);	
+
 	get_notes_pitch(symbols, intercept_space.first, intercept_space.second - 1);
-	write_detection_image("detected5.png", symbols, input_image);	
+	write_detection_image("detected7.png", symbols, input_image);
+	write_detection_txt("detected7.txt", symbols_hamming);
 }
