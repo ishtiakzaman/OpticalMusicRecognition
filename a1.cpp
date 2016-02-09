@@ -608,7 +608,7 @@ vector<DetectedSymbol> match_template_by_edge(const SDoublePlane &input, const v
 	SDoublePlane D = compute_distance_matrix(edge_map);
 
 	SDoublePlane score(input.rows(), input.cols());
-
+	
 	vector<DetectedSymbol> symbols;
 
 	for (int template_type = 0; template_type < template_image.size(); ++template_type)	
@@ -1198,7 +1198,7 @@ int main(int argc, char *argv[])
 		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
 		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
 	}
-	else if(scale_ratio >= 2.0 && scale_ratio <= 5.0)
+	else if(scale_ratio >= 2.0)
 	{
 		scale_ratio = 1/scale_ratio;
 		input_image = scale_image(input_image, scale_ratio);
