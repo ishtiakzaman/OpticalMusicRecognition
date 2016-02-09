@@ -727,7 +727,7 @@ SDoublePlane set_staff(const SDoublePlane &row_votes,int best_space,int intercep
 }
 
 //using the normalized votes find the best row co-ordinates for staff lines
-SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=8,int start=0)
+SDoublePlane find_best_line_intercepts(const SDoublePlane &row_votes,const SDoublePlane &normed_votes,int best_space,double norm_threshold=0.55,int neighbour_threshold=4,int start=0)
 {	
 	SDoublePlane row_spacing=row_votes;
 	if(start < row_votes.rows()){
@@ -838,10 +838,10 @@ SDoublePlane non_maximum_suppress_for_hough(const SDoublePlane &input, int w, in
 }
 //return a pair of 1-d SDoublePlane with 255 set for staff lines and integer representing distance between the staff lines 
 //max_suppress = 1 to do a line thinning before hough, 0 otherwise
-pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppress,double threshold=0.001,int neighborhood=8,double norm_threshold=0.55)
+pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppress,double threshold=0.001,int neighborhood=4,double norm_threshold=0.55)
 {	
 	SDoublePlane edges(input.rows(),input.cols());		
-	if(max_suppress = 1){
+	if(max_suppress == 1){
 		 edges=non_maximum_suppress_for_hough(input,0,2);
 	}
 	else{
@@ -887,17 +887,25 @@ pair<SDoublePlane,int> hough_transform(const SDoublePlane &input,int max_suppres
 }
 
 //draw lines on the image after hough transform
-SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input)
+SDoublePlane get_lines(const SDoublePlane &acc,const SDoublePlane &input,int rgb)
 {
-	SDoublePlane lines(input.rows(),input.cols());
-
+	SDoublePlane lines = input;
+	if(rgb==1){
 	for(int i=0;i<acc.rows();i++){
 		if(acc[i][0] == 255){
 			for(int j=0;j<input.cols();j++){
 				lines[i][j]=255;
 			}
 		}
-	}
+	}}
+	else{
+		 for(int i=0;i<acc.rows();i++){
+                if(acc[i][0] == 255){
+                        for(int j=0;j<input.cols();j++){
+                                lines[i][j]=0;
+                        }
+                }
+        }}	
 	return lines;
 }
 
@@ -1028,7 +1036,7 @@ void get_symbols(const SDoublePlane &input, vector<DetectedSymbol> &symbols, Typ
 {
 	for (int i = 0; i < input.rows(); i++)
 	{
-		for (int j = 40; j < input.cols(); j++)
+		for (int j = 100; j < input.cols(); j++)
 		{
 			if (input[i][j] != 0)
 			{
@@ -1060,6 +1068,10 @@ int get_notes_possitions(const SDoublePlane &input, const SDoublePlane &tmpl,
 	//SDoublePlane template_note = SImageIO::read_png_file("template1.png");
 	// get distance
 	SDoublePlane hammdis_note = get_Hamming_distance(input, tmpl);
+	if (t == NOTEHEAD)
+	{
+		write_image("scores4.png", hammdis_note);
+	}
 	//write_image("hamming_dist_note.png", hammdis_note);
 	// print_image_value(hammdis_note);
 	// cout << plane_max(hammdis_note) / 255 << endl;
@@ -1108,7 +1120,7 @@ int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, 
 		for(vector<int>::iterator giter = groups.begin(); giter < groups.end(); giter++)
 		{
 			int gy = *giter;
-			int dy = symiter->row - 0.1*interval - gy;
+			double dy = symiter->row - 0.2*interval - gy;
 			//if (dy < upper_bound)
 			//{
 			//	// missing some group
@@ -1119,7 +1131,7 @@ int get_notes_pitch(vector<DetectedSymbol> &symbols, const SDoublePlane &lines, 
 				// belong to next group
 				continue;
 			}
-			int np = 4 - dy * 2 / interval + 28;
+			int np = 4 - (int)(dy * 2 / interval) + 28;
 			if ((giter - groups.begin()) % 2 != 0)
 			{
 				np += 2;
@@ -1203,15 +1215,15 @@ int main(int argc, char *argv[])
 	
 
 	pair<SDoublePlane,int> intercept_space = hough_transform(input_image,1);
-	SDoublePlane lines = get_lines(intercept_space.first, input_image);
-	SImageIO::write_png_file("staves.png", input_image, lines, lines);
+	SImageIO::write_png_file("staves.png", get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,0),get_lines(intercept_space.first, input_image,1));
+
 	
 	// scale template
 	SDoublePlane tmpl_note = SImageIO::read_png_file("template1.png");
 	SDoublePlane tmpl_quarterrest = SImageIO::read_png_file("template2.png");
 	SDoublePlane tmpl_eighthrest = SImageIO::read_png_file("template3.png");
 	
-	double scale_ratio = (double)(intercept_space.second+1) / tmpl_note.rows();	
+	double scale_ratio = (double)(intercept_space.second) / tmpl_note.rows();
 	
 	if (scale_ratio < 2.0)
 	{
@@ -1219,7 +1231,7 @@ int main(int argc, char *argv[])
 		tmpl_quarterrest = scale_image(tmpl_quarterrest, scale_ratio);
 		tmpl_eighthrest = scale_image(tmpl_eighthrest, scale_ratio);
 	}
-	else if(scale_ratio >= 1.5 && scale_ratio <= 5.0)
+	else if(scale_ratio >= 2.0)
 	{
 		scale_ratio = 1/scale_ratio;
 		input_image = scale_image(input_image, scale_ratio);
@@ -1233,9 +1245,9 @@ int main(int argc, char *argv[])
 	
 	
 	vector<DetectedSymbol> symbols_hamming;
-	get_notes_possitions(input_image, tmpl_note, 0.70, pl_note, NOTEHEAD, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_quarterrest, 0.67, pl_quarterrest, QUARTERREST, symbols_hamming);
-	get_notes_possitions(input_image, tmpl_eighthrest, 0.67, pl_eighthrest, EIGHTHREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_note, 0.75, pl_note, NOTEHEAD, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_quarterrest, 0.71, pl_quarterrest, QUARTERREST, symbols_hamming);
+	get_notes_possitions(input_image, tmpl_eighthrest, 0.71, pl_eighthrest, EIGHTHREST, symbols_hamming);
 	
 	////////// Step 5 //////////
 	
